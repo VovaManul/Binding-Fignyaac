@@ -1,94 +1,109 @@
-# Dungeon Crawl — Ranged / Melee
+# Dungeon Crawl — рогалик в духе The Binding of Isaac
 
-A dark fantasy dungeon crawler inspired by *The Binding of Isaac*.
-Built with TypeScript and Canvas 2D, bundled with **Bun**.
+Top-down рогалик: процедурный данжен из комнат, два режима боя (дальний/ближний),
+враги, босс. Логика на чистом TypeScript, рендер — на **three.js** (ортографическая
+камера, картинка плоская 2D-сверху). Сборка — **Bun**.
 
-## Quick Start
+Есть **стартовое меню** с выбором уровня: данжен генерируется процедурно каждый
+забег, но параметризуется набором правил (размер, плотность/сила врагов, HP, seed).
+Внешний вид мира вынесен в «тему» — задел под кастомные ассеты (спрайты/текстуры).
+
+> Это рабочая **база для развития**, а не готовая игра. Архитектура специально
+> сделана так, чтобы её было легко расширять — и человеку, и ИИ-агентам.
+> Перед доработкой прочитай [`CLAUDE.md`](./CLAUDE.md) и [`docs/HOWTO.md`](./docs/HOWTO.md).
+
+## Быстрый старт
 
 ```bash
-bun install        # install deps (none currently required)
-bun start          # production build → dist/
-open dist/index.html
+bun install        # поставить зависимости (three, typescript)
+bun run dev        # дев-сервер с авто-пересборкой → http://localhost:3000
 ```
 
-Or for development with live reload:
+Продакшн-сборка:
 
 ```bash
-bun run dev        # starts dev server at http://localhost:3000 + watch mode
+bun run build      # минифицированный бандл → dist/  (открой dist/index.html)
 ```
 
-## Controls
+Проверки (запускай перед любым коммитом):
 
-| Key | Action |
+```bash
+bun run typecheck  # tsc --noEmit, строгий режим
+bun test           # юнит-тесты ядра
+bun run check      # и то, и другое разом
+```
+
+## Управление
+
+| Клавиша | Действие |
 |---|---|
-| WASD | Move |
-| Arrow keys | Attack in direction |
-| Space | Attack in facing direction |
-| Tab / Q | Switch weapon (Ranged ↔ Melee) |
-| R | Restart (on Game Over / Victory) |
+| WASD | движение |
+| Стрелки | прицельная стрельба/удар в направлении |
+| Пробел | атака по ходу движения |
+| Tab / Q | сменить оружие (Дальний ↔ Ближний) |
+| R | заново (на экране Game Over / Victory) |
+| Esc | вернуться в меню выбора уровня |
 
-## Weapons
+Чтобы перейти в соседнюю комнату — зачисти текущую (двери откроются) и встань на
+дверь, нажимая в её сторону.
 
-| Mode | Weapon | Speed | Damage | Effect |
+## Режимы боя
+
+| Режим | Оружие | Скорость | Урон | Особенность |
 |---|---|---|---|---|
-| Ranged | Pistol | Fast (10cd) | 1 per shot | Ranged projectiles |
-| Melee | Knife | Slow (22cd) | 2 + knockback | Wide swing arc |
+| Дальний | пистолет | быстро (cd 10) | 1 за выстрел | снаряды летят по прямой |
+| Ближний | нож | медленно (cd 22) | 2 + отбрасывание | широкий взмах |
 
-## Room Types
+## Типы комнат
 
-| Type | Description |
+| Тип | Описание |
 |---|---|
-| Spawn | Starting room, no enemies |
-| Normal | 2–4 enemies |
-| Treasure | No enemies, loot room |
-| Boss | 1 boss enemy, clearing wins the game |
+| spawn | старт, врагов нет |
+| normal | 2–4 врага |
+| treasure | без врагов (комната-награда), сразу открыта |
+| boss | 1 босс; его зачистка = победа |
 
-## Project Structure
+## Стек и устройство
+
+- **Bun** — рантайм, бандлер и тест-раннер.
+- **three.js** — WebGL-рендер мира через ортокамеру.
+- **TypeScript (strict)** — весь код.
+- Архитектура: **логика игры полностью отделена от рендера**. Ядро (`src/core/`)
+  не знает ни про DOM, ни про three.js, поэтому его легко тестировать и при
+  желании можно подменить рендер, не трогая игру.
+
+Подробности — в [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
+
+## Структура проекта
 
 ```
 src/
-├── main.ts              Entry point
-├── constants.ts         Grid, canvas, tile/door constants
-├── types.ts             Shared TypeScript types
-├── math.ts              Utility: shuffle, rand, dist, overlap
-├── input.ts             Keyboard state (global KEYS map)
-├── doors.ts             Door geometry helpers
-├── room/
-│   ├── Room.ts          Room class (tiles, enemies, tears)
-│   ├── RoomMap.ts       Map generation (connected 7×7 grid)
-│   └── tiles.ts         Tile builders (wall/floor/door placement)
-├── entities/
-│   ├── Player.ts        Player stat block
-│   ├── Enemy.ts         Enemy stat block + enemy type logic
-│   ├── Tear.ts          Ranged projectile
-│   └── MeleeSwing.ts    Melee hitbox
-├── game/
-│   ├── Game.ts          Main orchestrator (loop, tick, render)
-│   ├── collision.ts     Wall collision (isBlocked, collidesWall)
-│   ├── transitions.ts   Room transition detection
-│   └── spawner.ts       Enemy placement logic
-└── render/
-    ├── roomRenderer.ts      Tile rendering
-    ├── entityRenderer.ts    Player, enemy, tear, melee drawing
-    ├── hudRenderer.ts       HP bar, mode indicator, HUD
-    └── minimapRenderer.ts   Minimap drawing
+├── config.ts              ⭐ КОНСТАНТЫ движка: размеры, геометрия дверей, базовый баланс
+├── main.ts                точка входа: меню → игра, «склейка» логики/рендера/ввода
+├── core/                  ── ИГРОВАЯ ЛОГИКА (без DOM и three.js) ──
+│   ├── Game.ts            «мозг»: состояние + один шаг симуляции step()
+│   ├── rules.ts           ⭐ ПРАВИЛА УРОВНЯ (пресеты для меню: размер, враги, HP, seed)
+│   ├── types.ts           общие типы (Dir, RoomType, Box, …)
+│   ├── rng.ts             ГПСЧ с seed (детерминизм для тестов/отладки)
+│   ├── util.ts            мат-утилиты (dist, overlap, clamp, lerp)
+│   ├── entities/          Player, Enemy, Projectile, MeleeSwing
+│   ├── world/             Room, RoomMap (генерация), tiles
+│   └── systems/           collision, spawner (чистые функции)
+├── input/                 ── ВВОД ──
+│   ├── InputState.ts      абстрактные «намерения» (не сырые клавиши)
+│   └── KeyboardController.ts  клавиатура → InputState
+├── render/                ── РЕНДЕР (читает состояние, рисует) ──
+│   ├── Renderer.ts        интерфейс рендера
+│   ├── ThreeRenderer.ts   мир на three.js (ортокамера)
+│   ├── theme.ts           ⭐ ВНЕШНИЙ ВИД (цвета; задел под спрайты/текстуры)
+│   └── HudOverlay.ts      HUD и миникарта на 2D-канвасе поверх
+├── ui/
+│   └── StartMenu.ts       стартовое меню (DOM) с выбором уровня
+└── engine/
+    └── GameLoop.ts        игровой цикл с фиксированным шагом (60 Гц)
+
+tests/                     юнит-тесты ядра (bun test)
+docs/ARCHITECTURE.md       архитектура и потоки данных
+CLAUDE.md                  правила для ИИ-агентов и разработчика
+docs/HOWTO.md              рецепты: как добавить врага/оружие/комнату
 ```
-
-## Build System
-
-- **Bun** — runtime + bundler
-- `bun build` — bundles `src/main.ts` → `dist/main.js`
-- `build.ts` — production build with minification + HTML copy
-- No external libraries required (pure Canvas 2D)
-
-## Architecture
-
-- **Game** owns the game loop (`requestAnimationFrame`), the world
-  (`RoomMap`, `Player`), and dispatches to render functions.
-- **Tick** processes input → movement → attack → enemy AI → room
-  clear check → transitions → win condition.
-- **Transitions** check player tile position + keypress against door
-  geometry; call `Game.enterRoom()` which resets room state.
-- **Collision** allows bounding-box overlap at door openings (row/col
-  outside normal bounds).
-- **Rendering** is split into 4 pure functions that receive `ctx` + data.
