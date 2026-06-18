@@ -6,6 +6,16 @@
   "scripts": {
     "dev": "bun run dev.ts",
     "build": "bun run build.ts",
-    "start": "bun run build && echo 'open dist/index.html'"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "check": "bun run typecheck && bun test",
+    "start": "bun run build && echo 'Готово — открой dist/index.html'"
+  },
+  "dependencies": {
+    "three": "^0.184.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.184.1",
+    "typescript": "^6.0.3"
   }
 }

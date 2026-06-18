@@ -1,4 +1,4 @@
 node_modules/
-dist/*.map
+dist/
 *.log
 .DS_Store

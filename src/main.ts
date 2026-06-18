@@ -1,32 +1,71 @@
-import { setupInput, KEYS } from './input';
-import { Game } from './game/Game';
+/**
+ * main.ts — точка входа и «склейка». Поток:
+ *   стартовое меню → выбор уровня (правил) → создаём Game с этими правилами →
+ *   запускаем цикл. Esc во время игры — назад в меню.
+ *
+ * Это единственное место, где встречаются логика, рендер и ввод — поэтому
+ * именно здесь проще всего подменить рендер/ввод или добавить экраны.
+ */
+import { Game } from './core/Game';
+import { PRESETS, type LevelRules } from './core/rules';
+import { KeyboardController } from './input/KeyboardController';
+import { ThreeRenderer } from './render/ThreeRenderer';
+import { HudOverlay } from './render/HudOverlay';
+import { GameLoop } from './engine/GameLoop';
+import { StartMenu } from './ui/StartMenu';
 
-// Global key bindings (mode toggle, restart) handled here
-setupInput();
-
-window.addEventListener('keydown', (e: KeyboardEvent) => {
-  const game = (window as any).__game as Game | undefined;
-  if (!game) return;
-
-  // Toggle combat mode
-  if ((e.key === 'Tab' || e.key === 'q' || e.key === 'Q') && !game.gameOver && !game.won) {
-    e.preventDefault();
-    game.toggleMode();
-  }
-
-  // Restart
-  if (e.key === 'r' || e.key === 'R') {
-    if (game.gameOver || game.won) game.restart();
-  }
-});
-
-// Bootstrap
-window.addEventListener('load', () => {
-  const canvas = document.getElementById('game') as HTMLCanvasElement;
-  if (!canvas) {
-    document.body.innerHTML = '<p style="color:red">Error: canvas element not found</p>';
+function boot(): void {
+  const world = document.getElementById('game') as HTMLCanvasElement | null;
+  const hudCanvas = document.getElementById('hud') as HTMLCanvasElement | null;
+  const menuEl = document.getElementById('menu');
+  if (!world || !hudCanvas || !menuEl) {
+    document.body.innerHTML =
+      '<p style="color:#c33;font-family:monospace;padding:2rem">Ошибка: не найдены #game / #hud / #menu в разметке.</p>';
     return;
   }
-  const game = new Game(canvas);
-  (window as any).__game = game;
-});
+
+  // Рендер и ввод создаём один раз — они переиспользуются между забегами.
+  const controller = new KeyboardController();
+  const world3d = new ThreeRenderer(world);
+  const hud = new HudOverlay(hudCanvas);
+  controller.attach();
+
+  let loop: GameLoop | null = null;
+
+  const startGame = (rules: LevelRules): void => {
+    loop?.stop();
+    controller.reset(); // чистый ввод: не тащим зажатые клавиши/смену оружия из прошлого забега
+    const game = new Game(rules);
+    loop = new GameLoop(game, controller, (alpha) => {
+      world3d.render(game, alpha);
+      hud.render(game);
+    });
+    menu.hide();
+    loop.start();
+    // Debug-хэндл: в консоли браузера доступен `game`.
+    (window as Window & { game?: Game }).game = game;
+  };
+
+  const toMenu = (): void => {
+    loop?.stop();
+    loop = null;
+    menu.show(); // фон меню перекрывает «замёрзший» последний кадр
+  };
+
+  const menu = new StartMenu(menuEl, PRESETS, startGame);
+  menu.show();
+
+  // Esc во время игры — вернуться к выбору уровня.
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && loop) {
+      e.preventDefault();
+      toMenu();
+    }
+  });
+}
+
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', boot);
+} else {
+  boot();
+}

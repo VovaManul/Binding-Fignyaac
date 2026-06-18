@@ -1,131 +1,176 @@
-# Architecture
+# Архитектура
 
-## Overview
-
-The game is a single-page Canvas 2D application. The source is written
-in TypeScript and split into ~19 modules under `src/`, bundled by Bun
-into a single `dist/main.js`. The HTML shell in `dist/index.html` loads
-the bundle.
-
-## Module Dependency Graph
+## Главный принцип: логика отдельно от рендера
 
 ```
-main.ts
-  ├── input.ts           (global KEYS, setupInput)
-  └── Game.ts
-        ├── constants.ts (all shared numeric constants)
-        ├── types.ts     (Dir, RoomType, CombatMode, Box, Doors)
-        ├── math.ts      (shuffle, rand, ri, dist, overlap)
-        ├── RoomMap.ts   → Room.ts, tiles.ts, doors.ts
-        ├── Player.ts
-        ├── Enemy.ts
-        ├── Tear.ts
-        ├── MeleeSwing.ts
-        ├── collision.ts → Room.ts, tiles.ts
-        ├── transitions.ts → Game.ts (type only), input.ts
-        ├── spawner.ts   → Room.ts, Enemy.ts
-        └── render/*
-              → roomRenderer.ts, entityRenderer.ts,
-                hudRenderer.ts, minimapRenderer.ts
+            ┌──────────────────────────────────────────┐
+            │              GameLoop (engine/)            │
+            │   фиксированный шаг 60 Гц + интерполяция    │
+            └───────┬───────────────┬──────────────┬─────┘
+                    │ poll()        │ step(input)  │ render(game, alpha)
+                    ▼               ▼              ▼
+          KeyboardController     Game (core/)    Renderer (render/)
+          клавиши → InputState   состояние +     ЧИТАЕТ состояние,
+                                 логика игры      рисует three.js + HUD
 ```
 
-## Game Loop
+Три части не знают лишнего друг о друге:
 
-Every frame (`requestAnimationFrame`):
+- **`core/`** — игровая логика. Не импортирует ни `three`, ни DOM (`window`,
+  `document`, `canvas`). Получает на вход абстрактный `InputState`, меняет своё
+  состояние. Поэтому ядро **тестируется без браузера** (`bun test`) и не зависит
+  от того, чем мы рисуем.
+- **`render/`** — рендер. Только **читает** `Game` и рисует. Менять состояние
+  игры рендеру запрещено.
+- **`input/`** — превращает устройство ввода (клавиатуру) в абстрактные
+  «намерения» (`InputState`). Захочешь геймпад — добавишь ещё один контроллер.
 
-1. **Timers** — decrement `invTimer`, `atkCD`, `transCD`
-2. **Movement** — read WASD, apply velocity, resolve wall collisions
-3. **Attack** — read arrow keys / Space, fire tear or create melee swing
-4. **Melee Update** — decrement swing life, apply damage + knockback
-5. **Tear Update** — move projectiles, check wall/enemy collisions
-6. **Enemy AI** — chase player, contact damage with cooldown
-7. **Room Clear** — if all enemies dead → `room.cleared = true`, rebuild tiles with doors
-8. **Transition Check** — if player on door tile + key pressed → load adjacent room
-9. **Win Check** — if boss room cleared → `won = true`
-10. **Render** — draw room tiles → entities → HUD → minimap → overlays
+`main.ts` — единственное место, где всё это соединяется.
 
-## Transition System
+> **Почему так строго.** Этот проект уже один раз сломался, когда логику,
+> рендер и состояние перемешали и расползлись по модулям. Граница «логика ↔
+> рендер» — то, что не даёт повторить ту историю. Не протаскивай `three` в
+> `core/` и не лезь в игровое состояние из рендера.
 
-Room transitions are the most complex subsystem. Key design:
+## Игровой цикл с фиксированным шагом (engine/GameLoop.ts)
 
-- **Door geometry**: `DOOR` constant defines 3-tile-wide openings at
-  each cardinal edge (top: cols 6-8, row 0; bottom: cols 6-8, row 10;
-  left: rows 4-6, col 0; right: rows 4-6, col 14).
-- **Detection**: `checkTransition()` computes the player's tile position
-  (`col, row`). If they're on a door tile AND pressing the matching
-  movement key, the transition fires.
-- **Cooldown**: `transCD = 15` prevents re-entry within 15 frames.
-- **Movement lock**: Transition only works in cleared rooms
-  (`room.cleared === true`).
-- **Collision bypass**: `isBlocked()` returns `false` for out-of-bounds
-  tiles at door openings, letting the player's bounding box extend
-  beyond the room boundary.
+Старый код двигал всё прямо в `requestAnimationFrame`, поэтому скорость игры
+зависела от частоты монитора (на 144 Гц — в 2.4× быстрее). Теперь:
 
-## Collision System
+1. Раз в кадр опрашиваем ввод (`controller.poll()`).
+2. Однократные действия (смена оружия, рестарт) — `game.consumeActions(input)`.
+3. Копим реальное время в аккумуляторе и вызываем `game.step(input)` фиксированными
+   порциями по `1/60` секунды. Сколько бы ни был лаг — логика всегда идёт 60 шагов/с.
+4. Рисуем с коэффициентом интерполяции `alpha` (доля до следующего шага), чтобы
+   движение было плавным и на 144 Гц.
 
-- `isBlocked(room, col, row)` — per-tile check. Returns `true` for
-  wall tiles and out-of-bounds positions, except at door openings.
-- `collidesWall(box, room, ox, oy)` — iterates all tiles covered by
-  the entity's bounding box. If any tile is blocked, returns `true`.
-- Movement resolves axis-independently: apply X, revert if collision;
-  apply Y, revert if collision.
+Единица времени везде — **шаг** (= 1/60 c). Скорости заданы «пикселей за шаг»,
+перезарядки — «в шагах».
 
-## Room Generation
+## Шаг симуляции (core/Game.ts → step)
 
-`RoomMap.generate()` uses a random walk:
+Каждый шаг по порядку:
 
-1. Start at (0,0) with a spawn room.
-2. Maintain a frontier list of rooms that have room to expand.
-3. Each step, pick a random frontier room, shuffle directions, and
-   attempt to add a new room in an unoccupied adjacent cell within
-   the 7×7 grid.
-4. Room types are assigned probabilistically (boss at ~20%, treasure
-   at ~12%, rest normal).
-5. If no boss room was generated, one normal room is promoted.
+1. **Снимок prev-позиций** — `prevX/prevY` всех подвижных сущностей (для интерполяции).
+2. **Таймеры** — `invTimer`, `atkCD`, `transCD`.
+3. **Движение** игрока (WASD), коллизии со стенами по осям раздельно (скольжение).
+4. **Атака** — стрелки/пробел: выстрел (`Projectile`) или взмах (`MeleeSwing`).
+5. **Ближний бой** — урон+отбрасывание по врагам в хитбоксе взмаха.
+6. **Снаряды** — полёт, попадание в стену/врага.
+7. **ИИ врагов** — преследование игрока, контактный урон с перезарядкой.
+8. **Зачистка** — если врагов было >0 и все мертвы → `cleared=true`, открыть двери.
+9. **Переход** — стоя на двери и нажимая в её сторону → соседняя комната.
+10. **Победа** — если комната-босс зачищена → `won=true`.
 
-## Rendering
+Смерть (`hp<=0`) ставит `gameOver=true`; пока `gameOver`/`won` — `step()` ничего не делает.
 
-Rendering is split into 4 stateless functions, each taking
-`CanvasRenderingContext2D` as the first argument:
+## Ввод (input/)
 
-- **roomRenderer** — tile loop with wall/door/floor styles
-- **entityRenderer** — enemies (3 types), player (body + weapon),
-  tears, melee swing arc
-- **hudRenderer** — HP bar, mode indicator, enemy count, room label
-- **minimapRenderer** — 7×7 grid with visited/current room highlights
+`InputState` — снимок намерений: оси движения, направление прицела, флаги
+удержания и однократные «edge»-действия. Делится на:
 
-## Weapon Visuals
+- **удерживаемые** (`moveX/Y`, `aimDir`, `attackHeld`) — читаются каждый шаг;
+- **однократные** (`toggleWeapon`, `restart`) — срабатывают один раз на нажатие;
+  поэтому они обрабатываются в `consumeActions()` раз в кадр, а не в `step()`.
 
-- **Pistol (ranged)**: Barrel line + body rect, rotated toward facing
-  direction. Muzzle flash circle at `atkCD > 8`.
-- **Knife (melee)**: Triangular blade + handle + guard rects, offset
-  in facing direction.
+## Мир: комнаты и генерация (core/world/)
 
-## Enemy Types
+- **Комната** — сетка `COLS×ROWS` тайлов (стены по краю, пол внутри). Двери
+  прорезаются в тайлах только когда комната `cleared` (или это `spawn`).
+- **RoomMap** — связный набор комнат на сетке `(2·MAP_RADIUS+1)²`, генерируется
+  **случайным блужданием прямо в конструкторе**. Двери ставятся парами: у текущей
+  комнаты в сторону соседа и встречная у соседа (через `OPP`).
 
-| Type   | Size | HP | Speed | Damage | Visual |
-|--------|------|----|-------|--------|--------|
-| Normal | 32px | 3  | 1.15  | 1      | Brown block, yellow eyes |
-| Fast   | 26px | 2  | 1.9   | 1      | Red circle, small eyes |
-| Boss   | 46px | 10 | 0.9   | 2      | Large red circle, horns, HP bar |
+> **Исторический баг №1.** При разнесении на модули у `RoomMap` потеряли вызов
+> генерации → карта была пустой → игра падала на старте. Теперь генерация в
+> конструкторе, а тест `tests/roomMap.test.ts` это стережёт.
+>
+> **Исторический баг №2.** `OPP` была `{up:'bottom', down:'top'}` (несуществующие
+> ключи дверей) — встречные двери не ставились. Сейчас `{up:'down', down:'up'}`,
+> симметрия дверей покрыта тестом.
 
-## State Management
+## Коллизии (core/systems/collision.ts)
 
-- `GAME_OVER` / `WON` — boolean flags checked in loop and render.
-- `KEYS` — global mutable map, reset on window blur.
-- Room state (`cleared`, `visited`, `enemies[]`, `tears[]`) — per-room.
-- Player state (`hp`, `mode`, `facing`, `transCD`, etc.) — single
-  `Player` instance.
-- Cooldowns (`invTimer`, `atkCD`, `transCD`) decrement each frame.
+- `isBlocked(room, col, row)` — тайл-стена или выход за границы блокируют, **кроме**
+  дверных проёмов (там граница «прозрачна», чтобы встать на дверь и перейти).
+- `collidesWall(box, room)` — перебирает тайлы под хитбоксом.
+- Движение разрешается по осям раздельно: применяем X (откат при коллизии),
+  затем Y. Это даёт «скольжение» вдоль стен.
 
-## Build Pipeline
+## Рендер (render/)
+
+Два наложенных холста (см. `index.html`):
+
+- **`#game`** — WebGL, мир рисует `ThreeRenderer`.
+- **`#hud`** — 2D-канвас поверх, `HudOverlay` рисует HP, индикатор режима,
+  счётчик врагов, подпись комнаты, миникарту и оверлеи Game Over/Victory.
+
+### ThreeRenderer — ортокамера и «плоское 2D»
+
+- `OrthographicCamera(0, CW, 0, CH, …)` отображает мировые координаты **один в
+  один** в пиксельные (x вправо, y вниз). Поэтому вся математика ядра валидна без
+  пересчётов. Слои по `z` (пол < стены < сущности < снаряды).
+- Камера переворачивает ось Y → инвертируется порядок вершин → при обычном
+  отсечении задних граней плоскости были бы невидимы. Поэтому все материалы —
+  **`DoubleSide`** (правильный выбор для плоских спрайтов).
+
+> **Исторический баг №3.** Именно из-за инверсии Y и отсечения граней мир рисовался
+> «в пустоту» (чёрный экран при работающих draw-call). Лечится `DoubleSide`.
+
+### Управление ресурсами GPU (важно — иначе утечки)
+
+- Общие геометрии-«единицы» (`unitPlane`, `unitCircle`) масштабируются под размер
+  сущности — не плодим геометрии.
+- Тайлы комнаты пересобираются **только при смене комнаты**.
+- Меши сущностей создаются/удаляются по факту появления/исчезновения
+  (mark-and-sweep в `sync*`), их персональные материалы корректно `dispose()`-ятся.
+- Общие ресурсы освобождаются один раз в `dispose()`.
+
+## HiDPI
+
+`ThreeRenderer` и `HudOverlay` увеличивают буфер под `devicePixelRatio` (до 2×),
+а рисуют в логических координатах `CW×CH`. CSS-размер холстов фиксирован
+(`width/height: 100%` внутри `#stage` 880×660) — без этого canvas как
+replaced-элемент показался бы в размер HiDPI-буфера и вылез бы за рамки.
+
+## Детерминизм
+
+Вся случайность идёт через один экземпляр `Rng` (seed). Один и тот же seed даёт
+одну и ту же карту/спавн — удобно для отладки и обязательно для тестов. Никаких
+`Math.random()` в `core/` — только `rng`.
+
+## Меню, правила уровня и кастомные ассеты
+
+### Поток запуска
+
+`main.ts` показывает стартовое меню (`ui/StartMenu.ts`, DOM поверх холстов). По
+клику на уровень создаётся `Game(rules)` и запускается `GameLoop`. Esc во время
+игры останавливает цикл и снова показывает меню (фон меню перекрывает последний
+кадр). Рендер (`ThreeRenderer`, `HudOverlay`) и ввод создаются один раз и
+переиспользуются между забегами; на каждый забег пересоздаётся только `Game` и
+`GameLoop`. Рендер сам подхватывает смену игры: новая комната ≠ отрисованной →
+геометрия комнаты пересобирается, меши старых сущностей убираются mark-and-sweep.
+
+### Правила уровня (core/rules.ts)
+
+`LevelRules` — данные, параметризующие забег: размер карты, плотность/сила врагов,
+HP/скорость игрока, опциональный фиксированный seed. `PRESETS` — список для меню
+(добавил объект → пункт появился). Правила протекают так:
 
 ```
-bun build src/main.ts --outdir dist --target browser --minify
-cp src/index.html dist/
+LevelRules ──► Game(rules) ──► RoomMap(rng, rules)   // размер карты
+                          └──► Player(rules.player)    // HP/скорость
+                          └──► spawnEnemies(..., rules) // число/тип/сила врагов (множители)
 ```
 
-- Bundler: Bun's native bundler (esbuild under the hood).
-- Target: browser (ES module → IIFE/global wrapper).
-- Result: single `dist/main.js` (~30 KB) + `dist/index.html`.
-- Open `dist/index.html` directly in any modern browser.
+Граница: **геометрия движка** (размер тайла/комнаты, геометрия дверей) живёт в
+`config.ts` и не меняется от уровня к уровню; **правила забега** — в `rules.ts`.
+`config` задаёт базовые значения, `rules` — поверх (например, множители HP врагов).
+
+### Тема / ассеты (render/theme.ts)
+
+Внешний вид мира вынесен в `Theme` (сейчас — только цвета примитивов). `ThreeRenderer`
+берёт цвета из темы, а не из хардкода, поэтому вид легко подменить, не трогая логику.
+Это **задел под кастомные ассеты**: чтобы перейти на спрайты/текстуры, расширь `Theme`
+полями с путями к изображениям, загрузи их `THREE.TextureLoader` и положи в
+`material.map`. Логика игры при этом не меняется.
