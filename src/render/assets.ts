@@ -23,16 +23,6 @@ function canvas(w: number, h: number): { cv: HTMLCanvasElement; ctx: CanvasRende
   return { cv, ctx: cv.getContext('2d')! };
 }
 
-function texture(cv: HTMLCanvasElement, pixelated = true): THREE.CanvasTexture {
-  const t = new THREE.CanvasTexture(cv);
-  t.colorSpace = THREE.SRGBColorSpace;
-  if (pixelated) {
-    t.magFilter = THREE.NearestFilter;
-    t.minFilter = THREE.NearestFilter;
-  }
-  return t;
-}
-
 /** Скруглённый прямоугольник (хелпер рисования). */
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   ctx.beginPath();
@@ -192,14 +182,31 @@ function drawShadow(): HTMLCanvasElement {
  */
 export class Assets {
   private cache = new Map<string, THREE.Texture>();
+  private readonly loader = new THREE.TextureLoader();
 
+  /**
+   * Возвращает текстуру по ключу. Сначала пытается загрузить PNG из
+   * `src/assets/<key>.png` (поставляется художником, см. docs/ASSET_BRIEF.md);
+   * если файла нет — рисует процедурный фолбэк, чтобы игра не ломалась.
+   * 404 в консоли для ещё не добавленных ассетов — это норма (сработал фолбэк).
+   */
   private get(key: string, build: () => HTMLCanvasElement, pixelated = true): THREE.Texture {
-    let t = this.cache.get(key);
-    if (!t) {
-      t = texture(build(), pixelated);
-      this.cache.set(key, t);
+    const cached = this.cache.get(key);
+    if (cached) return cached;
+
+    const tex = this.loader.load(
+      `assets/${key}.png`,
+      undefined,
+      undefined,
+      () => { tex.image = build() as unknown as HTMLImageElement; tex.needsUpdate = true; }, // PNG нет → процедурный фолбэк
+    );
+    tex.colorSpace = THREE.SRGBColorSpace;
+    if (pixelated) {
+      tex.magFilter = THREE.NearestFilter;
+      tex.minFilter = THREE.NearestFilter;
     }
-    return t;
+    this.cache.set(key, tex);
+    return tex;
   }
 
   sprite(key: SpriteKey): THREE.Texture {
