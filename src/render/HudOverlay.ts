@@ -9,6 +9,18 @@ import type { Renderer } from './Renderer';
  */
 export class HudOverlay implements Renderer {
   private readonly ctx: CanvasRenderingContext2D;
+  private readonly images = new Map<string, HTMLImageElement>();
+
+  /** Лениво грузит PNG из assets/<name>.png; возвращает картинку, только когда она готова. */
+  private img(name: string): HTMLImageElement | null {
+    let im = this.images.get(name);
+    if (!im) {
+      im = new Image();
+      im.src = `assets/${name}.png`;
+      this.images.set(name, im);
+    }
+    return im.complete && im.naturalWidth > 0 ? im : null;
+  }
 
   constructor(canvas: HTMLCanvasElement) {
     // Буфер увеличиваем под плотность пикселей (чёткий текст на HiDPI),
@@ -40,20 +52,12 @@ export class HudOverlay implements Renderer {
     const p = game.player;
     const room = game.curRoom;
 
-    // Полоса здоровья.
-    const bx = 20, by = 20, bw = 140, bh = 14;
-    ctx.fillStyle = '#111'; ctx.fillRect(bx, by, bw, bh);
-    ctx.fillStyle = '#2a0a0a'; ctx.fillRect(bx + 2, by + 2, bw - 4, bh - 4);
-    const hpRatio = Math.max(0, p.hp / p.maxHp);
-    ctx.fillStyle = hpRatio > 0.5 ? '#993333' : hpRatio > 0.25 ? '#994422' : '#663322';
-    ctx.fillRect(bx + 2, by + 2, (bw - 4) * hpRatio, bh - 4);
-    ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.strokeRect(bx, by, bw, bh);
-    ctx.fillStyle = '#bbb'; ctx.font = '10px monospace'; ctx.textAlign = 'center';
-    ctx.fillText(`HP ${p.hp}/${p.maxHp}`, bx + bw / 2, by + bh - 3);
+    // Здоровье: сердечки (2 HP = сердце), с фолбэком на полосу.
+    const healthBottom = this.drawHealth(p.hp, p.maxHp);
 
     // Название текущего уровня (правил).
     ctx.textAlign = 'left'; ctx.fillStyle = '#667'; ctx.font = '11px monospace';
-    ctx.fillText(`Уровень: ${game.rules.name}`, bx, by + bh + 14);
+    ctx.fillText(`Уровень: ${game.rules.name}`, 20, healthBottom + 14);
 
     // Индикатор режима боя.
     const my = CH - 46;
@@ -65,6 +69,9 @@ export class HudOverlay implements Renderer {
     ctx.strokeStyle = mCol; ctx.lineWidth = 2; ctx.strokeRect(CW / 2 - 95, my - 18, 190, 34);
     ctx.fillStyle = mCol; ctx.font = 'bold 17px monospace'; ctx.fillText(`[ ${mText} ]`, CW / 2, my + 8);
     ctx.fillStyle = '#555'; ctx.font = '11px monospace'; ctx.fillText('[Tab] сменить оружие', CW / 2, my - 26);
+    // Иконка оружия слева в рамке (если ассет есть).
+    const icon = this.img(ranged ? 'icon-ranged' : 'icon-melee');
+    if (icon) ctx.drawImage(icon, CW / 2 - 90, my - 14, 26, 26);
 
     // Счётчик врагов / подсказка зачистки.
     ctx.textAlign = 'left';
@@ -85,6 +92,36 @@ export class HudOverlay implements Renderer {
         ctx.fillText(label, CW - 20, OY + RH + 30);
       }
     }
+  }
+
+  /** Рисует здоровье сердечками (2 HP = сердце); фолбэк — полоса. Возвращает нижний Y. */
+  private drawHealth(hp: number, maxHp: number): number {
+    const ctx = this.ctx;
+    const x0 = 20, y0 = 16;
+    const full = this.img('heart-full');
+    const half = this.img('heart-half');
+    const empty = this.img('heart-empty');
+    if (full && half && empty) {
+      const sz = 26, gap = 2;
+      const slots = Math.ceil(maxHp / 2);
+      for (let i = 0; i < slots; i++) {
+        const rem = hp - i * 2;
+        const im = rem >= 2 ? full : rem === 1 ? half : empty;
+        ctx.drawImage(im, x0 + i * (sz + gap), y0, sz, sz);
+      }
+      return y0 + sz;
+    }
+    // Фолбэк — полоса HP.
+    const by = 20, bw = 140, bh = 14;
+    ctx.fillStyle = '#111'; ctx.fillRect(x0, by, bw, bh);
+    ctx.fillStyle = '#2a0a0a'; ctx.fillRect(x0 + 2, by + 2, bw - 4, bh - 4);
+    const ratio = Math.max(0, hp / maxHp);
+    ctx.fillStyle = ratio > 0.5 ? '#993333' : ratio > 0.25 ? '#994422' : '#663322';
+    ctx.fillRect(x0 + 2, by + 2, (bw - 4) * ratio, bh - 4);
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.strokeRect(x0, by, bw, bh);
+    ctx.fillStyle = '#bbb'; ctx.font = '10px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(`HP ${hp}/${maxHp}`, x0 + bw / 2, by + bh - 3);
+    return by + bh;
   }
 
   private drawMinimap(game: Game): void {
