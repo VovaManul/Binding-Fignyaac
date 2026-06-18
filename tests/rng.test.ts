@@ -41,4 +41,21 @@ describe('Rng', () => {
     const shuffled = r.shuffle([...arr]);
     expect([...shuffled].sort()).toEqual(arr);
   });
+
+  it('авто-seed не вызывает Math.random()', () => {
+    const math = Math as Math & { random: () => number };
+    const original = math.random;
+    math.random = () => { throw new Error('Math.random вызван'); };
+    try {
+      const r = new Rng();
+      expect(r.next()).toBeGreaterThanOrEqual(0);
+      expect(r.next()).toBeLessThan(1);
+    } finally {
+      math.random = original;
+    }
+  });
+
+  it('pick явно ругается на пустой массив', () => {
+    expect(() => new Rng(1).pick([])).toThrow('пустой массив');
+  });
 });

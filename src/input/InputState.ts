@@ -19,6 +19,11 @@ export interface InputState {
   restart: boolean;      // рестарт на экране конца игры (однократно)
 }
 
+/** Любой источник ввода для игрового цикла: клавиатура, геймпад, бот, тест. */
+export interface InputSource {
+  poll(): InputState;
+}
+
 /** Нейтральный снимок — ничего не нажато. */
 export function emptyInput(): InputState {
   return {

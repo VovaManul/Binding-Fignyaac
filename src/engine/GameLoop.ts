@@ -1,6 +1,6 @@
-import { FIXED_DT } from '../config';
+import { FIXED_DT, GAME_LOOP } from '../config';
 import type { Game } from '../core/Game';
-import type { KeyboardController } from '../input/KeyboardController';
+import type { InputSource } from '../input/InputState';
 
 /**
  * Игровой цикл с ФИКСИРОВАННЫМ шагом.
@@ -15,11 +15,10 @@ export class GameLoop {
   private last = 0;
   private rafId = 0;
   private running = false;
-  private readonly maxSteps = 5; // защита от «спирали смерти» при лагах
 
   constructor(
     private readonly game: Game,
-    private readonly controller: KeyboardController,
+    private readonly controller: InputSource,
     private readonly onRender: (alpha: number) => void,
   ) {}
 
@@ -31,16 +30,19 @@ export class GameLoop {
   }
 
   stop(): void {
+    if (!this.running) return;
     this.running = false;
     cancelAnimationFrame(this.rafId);
+    this.rafId = 0;
   }
 
   private frame = (now: number): void => {
+    if (!this.running) return;
     this.rafId = requestAnimationFrame(this.frame);
 
     let frameTime = (now - this.last) / 1000;
     this.last = now;
-    if (frameTime > 0.25) frameTime = 0.25; // не «отыгрывать» долгие паузы (фон/таб)
+    if (frameTime > GAME_LOOP.maxFrameTimeSec) frameTime = GAME_LOOP.maxFrameTimeSec;
 
     // Ввод опрашиваем раз в кадр; однократные действия — тоже раз в кадр.
     const input = this.controller.poll();
@@ -48,12 +50,12 @@ export class GameLoop {
 
     this.accumulator += frameTime;
     let steps = 0;
-    while (this.accumulator >= FIXED_DT && steps < this.maxSteps) {
+    while (this.accumulator >= FIXED_DT && steps < GAME_LOOP.maxStepsPerFrame) {
       this.game.step(input);
       this.accumulator -= FIXED_DT;
       steps++;
     }
-    if (steps === this.maxSteps) this.accumulator = 0; // отстали — ресинхронизируемся
+    if (steps === GAME_LOOP.maxStepsPerFrame) this.accumulator = 0; // отстали — ресинхронизируемся
 
     const alpha = this.accumulator / FIXED_DT;
     this.onRender(alpha);
