@@ -7,15 +7,14 @@ Built with TypeScript and Canvas 2D, bundled with **Bun**.
 
 ```bash
 bun install        # install deps (none currently required)
-bun start          # build + prepare dist/
+bun start          # production build → dist/
 open dist/index.html
 ```
 
-Or for development with watch mode:
+Or for development with live reload:
 
 ```bash
-bun run dev        # watches src/ and rebuilds dist/main.js
-# then open dist/index.html manually
+bun run dev        # starts dev server at http://localhost:3000 + watch mode
 ```
 
 ## Controls

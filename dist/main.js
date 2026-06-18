@@ -1,3 +1,1091 @@
-var H={};function l(){window.addEventListener("keydown",(q)=>{if(H[q.key]=!0,["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(q.key))q.preventDefault()}),window.addEventListener("keyup",(q)=>{H[q.key]=!1}),window.addEventListener("blur",()=>{for(let q in H)delete H[q]})}var N=880,b=660,j=44,K=15,M=11,s=660,D=484,u=110,v=80,Y=0,m=1,W=2,P=0,a=1,k={up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]},g={up:"bottom",down:"top",left:"right",right:"left"},B={up:{cols:[6,7,8],row:0,cx:7,cy:0},down:{cols:[6,7,8],row:10,cx:7,cy:10},left:{col:0,rows:[4,5,6],cx:0,cy:5},right:{col:14,rows:[4,5,6],cx:14,cy:5}},O=3,r=8,o=4;function E(q){let J=[];for(let Q=0;Q<M;Q++){J[Q]=[];for(let V=0;V<K;V++)J[Q][V]=Q===0||Q===M-1||V===0||V===K-1?Y:m}if(q)V0(J,q);return J}function V0(q,J){if(J.up)for(let Q of B.up.cols)q[B.up.row][Q]=W;if(J.down)for(let Q of B.down.cols)q[B.down.row][Q]=W;if(J.left)for(let Q of B.left.rows)q[Q][B.left.col]=W;if(J.right)for(let Q of B.right.rows)q[Q][B.right.col]=W}function e(q){for(let J=q.length-1;J>0;J--){let Q=Math.random()*J|0;[q[J],q[Q]]=[q[Q],q[J]]}return q}function $0(q,J){return Math.random()*(J-q)+q}function S(q,J){return Math.floor($0(q,J+1))}function x(q,J){return q.x<J.x+J.w&&q.x+q.w>J.x&&q.y<J.y+J.h&&q.y+q.h>J.y}class f{c;r;type;doors={up:!1,down:!1,left:!1,right:!1};visited=!1;cleared=!1;enemies=[];tears=[];tiles;constructor(q,J,Q){this.c=q,this.r=J,this.type=Q,this.tiles=E()}buildTiles(){this.tiles=E(this.cleared||this.type==="spawn"?this.doors:void 0)}}class I{rooms=new Map;key(q,J){return q+","+J}get(q,J){return this.rooms.get(this.key(q,J))}has(q,J){return this.rooms.has(this.key(q,J))}add(q,J,Q){let V=new f(q,J,Q);return this.rooms.set(this.key(q,J),V),V}hasBoss(){for(let q of this.rooms.values())if(q.type==="boss")return!0;return!1}generate(){this.add(0,0,"spawn");let q=[[0,0]],J=1,Q=r+S(0,o),V=[["up",0,-1],["down",0,1],["left",-1,0],["right",1,0]];while(q.length>0&&J<Q){let $=S(0,q.length-1),[z,F]=q[$];e(V);let U=!1;for(let[X,Z,_]of V){if(J>=Q)break;let G=z+Z,A=F+_;if(Math.abs(G)>O||Math.abs(A)>O)continue;if(this.has(G,A))continue;let L="normal";if(!this.hasBoss()&&(J===Q-1||Math.random()<0.2&&J>=3))L="boss";else if(Math.random()<0.12&&J>=2)L="treasure";this.add(G,A,L);let p=X;this.get(z,F).doors[p]=!0,this.get(G,A).doors[g[p]]=!0,q.push([G,A]),J++,U=!0}if(!U)q.splice($,1)}if(!this.hasBoss()){let $=[...this.rooms.values()].filter((z)=>z.type==="normal");if($.length>0)$[S(0,$.length-1)].type="boss"}}}class T{x=0;y=0;w=26;h=26;speed=3.2;hp=6;maxHp=6;mode=P;facing="up";moveDir="up";atkCD=0;invTimer=0;transCD=0;get box(){return{x:this.x-this.w/2,y:this.y-this.h/2,w:this.w,h:this.h}}}var z0={normal:{w:32,hp:3,speed:1.15,damage:1},fast:{w:26,hp:2,speed:1.9,damage:1},boss:{w:46,hp:10,speed:0.9,damage:2}};class i{x;y;type;w;h;hp;maxHp;speed;damage;knx=0;kny=0;hitTimer=0;atkTimer=0;constructor(q,J,Q){this.x=q,this.y=J,this.type=Q;let V=z0[Q];this.w=V.w,this.h=V.w,this.hp=V.hp,this.maxHp=V.hp,this.speed=V.speed,this.damage=V.damage}get box(){return{x:this.x-this.w/2,y:this.y-this.h/2,w:this.w,h:this.h}}get alive(){return this.hp>0}}class d{x;y;dx;dy;r=5;speed=7;damage=1;life=80;constructor(q,J,Q,V){this.x=q,this.y=J,this.dx=Q,this.dy=V}get alive(){return this.life>0}}class n{dir;life=10;damage=2;kb=10;box;constructor(q,J,Q){this.dir=Q;let V=22,$=50,[z,F]=k[Q];this.box={x:q+(z>0?V:z<0?-V-$:-$/2),y:J+(F>0?V:F<0?-V-$:-$/2),w:$,h:$}}get alive(){return this.life>0}}function j0(q,J,Q){if(Q<0&&q.doors.up&&B.up.cols.includes(J))return!1;if(Q>=M&&q.doors.down&&B.down.cols.includes(J))return!1;if(J<0&&q.doors.left&&B.left.rows.includes(Q))return!1;if(J>=K&&q.doors.right&&B.right.rows.includes(Q))return!1;if(Q<0||Q>=M||J<0||J>=K)return!0;return q.tiles[Q][J]===Y}function C(q,J,Q,V){let $=Math.floor((q.x-Q)/w),z=Math.floor((q.x+q.w-Q)/w),F=Math.floor((q.y-V)/w),U=Math.floor((q.y+q.h-V)/w);for(let X=F;X<=U;X++)for(let Z=$;Z<=z;Z++)if(j0(J,Z,X))return!0;return!1}var w=44;var F0={up:["w","W","ArrowUp"],down:["s","S","ArrowDown"],left:["a","A","ArrowLeft"],right:["d","D","ArrowRight"]};function R(q){for(let J of F0[q])if(H[J])return!0;return!1}function c(q){if(q.gameOver||q.won)return;if(q.player.transCD>0)return;let{player:J,curRoom:Q}=q;if(!Q.cleared)return;let V=Math.floor((J.x-u)/j),$=Math.floor((J.y-v)/j);if($===0&&Q.doors.up&&B.up.cols.includes(V)&&R("up")){if(q.roomMap.has(q.cc,q.cr-1)){q.cr--,q.enterRoom("down");return}}if($===M-1&&Q.doors.down&&B.down.cols.includes(V)&&R("down")){if(q.roomMap.has(q.cc,q.cr+1)){q.cr++,q.enterRoom("up");return}}if(V===0&&Q.doors.left&&B.left.rows.includes($)&&R("left")){if(q.roomMap.has(q.cc-1,q.cr)){q.cc--,q.enterRoom("right");return}}if(V===K-1&&Q.doors.right&&B.right.rows.includes($)&&R("right")){if(q.roomMap.has(q.cc+1,q.cr)){q.cc++,q.enterRoom("left");return}}}function t(q,J){for(let Q=0;Q<M;Q++)for(let V=0;V<K;V++){let $=u+V*j,z=v+Q*j,F=J.tiles[Q][V];if(F===Y)q.fillStyle="#1a1a24",q.fillRect($,z,j,j),q.fillStyle="#242436",q.fillRect($+2,z+2,j-4,j-4),q.fillStyle="#1e1e2c",q.fillRect($+4,z+4,j-8,j-8),q.strokeStyle="#161620",q.lineWidth=1,q.beginPath(),q.moveTo($,z+j/2),q.lineTo($+j,z+j/2),q.stroke(),q.beginPath(),q.moveTo($+j/2,z),q.lineTo($+j/2,z+j/2),q.stroke();else if(F===W)q.fillStyle="#0d0d14",q.fillRect($,z,j,j),q.fillStyle="#2a1e0e",q.fillRect($+6,z+6,j-12,j-12),q.fillStyle="#3a2e14",q.fillRect($+10,z+10,j-20,j-20);else{let U=(Q+V)%2===0;q.fillStyle=U?"#2e2e24":"#353528",q.fillRect($,z,j,j)}}q.strokeStyle="rgba(0,0,0,0.3)",q.lineWidth=2,q.strokeRect(u,v,s,D)}function q0(q,J,Q,V){for(let $ of J.enemies){if(!$.alive)continue;let z=$.hitTimer>0&&$.hitTimer%4<2;if(q.save(),q.fillStyle="rgba(0,0,0,0.3)",q.beginPath(),q.ellipse($.x+2,$.y+$.h/4,$.w/3,4,0,0,Math.PI*2),q.fill(),$.type==="boss")U0(q,$,z);else if($.type==="fast")Z0(q,$,z);else B0(q,$,z);q.restore()}X0(q,Q);for(let $ of J.tears){if(!$.alive)continue;q.save(),q.fillStyle="#6699cc",q.beginPath(),q.arc($.x,$.y,$.r,0,Math.PI*2),q.fill(),q.fillStyle="#99bbee",q.beginPath(),q.arc($.x-1.5,$.y-1.5,$.r-2,0,Math.PI*2),q.fill(),q.restore()}if(V&&V.alive)v0(q,V)}function U0(q,J,Q){if(q.fillStyle=Q?"#ddd":"#5a0a0a",q.beginPath(),q.arc(J.x,J.y,J.w/2,0,Math.PI*2),q.fill(),q.fillStyle="#4a0808",q.beginPath(),q.arc(J.x-3,J.y-3,J.w/2-4,0,Math.PI*2),q.fill(),q.fillStyle=Q?"#000":"#ff3333",q.beginPath(),q.arc(J.x-8,J.y-8,5,0,Math.PI*2),q.fill(),q.beginPath(),q.arc(J.x+8,J.y-8,5,0,Math.PI*2),q.fill(),q.fillStyle="#000",q.beginPath(),q.arc(J.x-8,J.y-8,2.5,0,Math.PI*2),q.fill(),q.beginPath(),q.arc(J.x+8,J.y-8,2.5,0,Math.PI*2),q.fill(),q.fillStyle=Q?"#bbb":"#3a0505",q.beginPath(),q.moveTo(J.x-16,J.y-J.w/2+4),q.lineTo(J.x-8,J.y-J.w/2-16),q.lineTo(J.x,J.y-J.w/2+4),q.fill(),q.beginPath(),q.moveTo(J.x-4,J.y-J.w/2+4),q.lineTo(J.x+4,J.y-J.w/2-16),q.lineTo(J.x+12,J.y-J.w/2+4),q.fill(),J.hp<J.maxHp)q.fillStyle="#222",q.fillRect(J.x-22,J.y-J.h/2-14,44,4),q.fillStyle="#c33",q.fillRect(J.x-22,J.y-J.h/2-14,44*(J.hp/J.maxHp),4)}function Z0(q,J,Q){q.fillStyle=Q?"#ddd":"#992222",q.beginPath(),q.arc(J.x,J.y,J.w/2,0,Math.PI*2),q.fill(),q.fillStyle="#771111",q.beginPath(),q.arc(J.x-1,J.y-1,J.w/2-3,0,Math.PI*2),q.fill(),q.fillStyle="#ff4444",q.beginPath(),q.arc(J.x-5,J.y-4,3,0,Math.PI*2),q.fill(),q.beginPath(),q.arc(J.x+5,J.y-4,3,0,Math.PI*2),q.fill(),q.fillStyle="#000",q.beginPath(),q.arc(J.x-5,J.y-5,1.5,0,Math.PI*2),q.fill(),q.beginPath(),q.arc(J.x+5,J.y-5,1.5,0,Math.PI*2),q.fill()}function B0(q,J,Q){q.fillStyle=Q?"#ccc":"#5a4a2e",q.fillRect(J.x-J.w/2,J.y-J.h/2,J.w,J.h),q.fillStyle="#4a3a1e",q.fillRect(J.x-J.w/2+3,J.y-J.h/2+3,J.w-6,J.h-6),q.fillStyle="#332816",q.fillRect(J.x-J.w/2+6,J.y-J.h/2+6,J.w-12,J.h-12),q.fillStyle="#ffcc66",q.fillRect(J.x-7,J.y-5,5,5),q.fillRect(J.x+2,J.y-5,5,5),q.fillStyle="#000",q.fillRect(J.x-6,J.y-4,3,3),q.fillRect(J.x+3,J.y-4,3,3)}function X0(q,J){q.save();let Q=J.invTimer>0&&J.invTimer%6<3,V=J.mode===0?"#2a6a9a":"#9a3a2a";q.fillStyle=Q?"#ddd":V,q.fillRect(J.x-J.w/2,J.y-J.h/2,J.w,J.h),q.fillStyle=Q?"#ccc":"rgba(0,0,0,0.3)",q.fillRect(J.x-J.w/2+3,J.y-J.h/2+3,J.w-6,J.h-6);let[$,z]=k[J.facing],F=J.x+$*(J.w/2+4),U=J.y+z*(J.h/2+4);if(J.mode===0)H0(q,J,F,U,$,z,Q);else N0(q,F,U,$,z,Q);q.fillStyle="#fff";let X=J.x+$*5,Z=J.y+z*5;q.fillRect(X-5,Z-4,4,5),q.fillRect(X+1,Z-4,4,5),q.fillStyle="#111",q.fillRect(X-4+$,Z-3+z,2,3),q.fillRect(X+2+$,Z-3+z,2,3),q.restore()}function H0(q,J,Q,V,$,z,F){q.strokeStyle=F?"#999":"#555",q.lineWidth=3,q.lineCap="round",q.beginPath(),q.moveTo(Q,V),q.lineTo(Q+$*14+z*2,V+z*14+$*2),q.stroke(),q.fillStyle=F?"#aaa":"#444",q.save();let U=z!==0?Math.PI/2*(z<0?-1:1):$<0?Math.PI:0;if(q.translate(J.x+$*8,J.y+z*8),q.rotate(U),q.fillRect(-7,-4,14,8),q.restore(),J.atkCD>8&&J.mode===0)q.fillStyle="rgba(255,200,50,0.6)",q.beginPath(),q.arc(Q+$*16,V+z*16,6,0,Math.PI*2),q.fill(),q.fillStyle="rgba(255,255,200,0.4)",q.beginPath(),q.arc(Q+$*18,V+z*18,8,0,Math.PI*2),q.fill()}function N0(q,J,Q,V,$,z){q.strokeStyle=z?"#bbb":"#ccc",q.lineWidth=2;let F=J+V*6,U=Q+$*6;q.beginPath(),q.moveTo(F,U),q.lineTo(F+V*16-$*6,U+$*16+V*6),q.lineTo(F+V*16+$*6,U+$*16-V*6),q.closePath(),q.fillStyle=z?"#ddd":"#d4d4d4",q.fill(),q.stroke(),q.fillStyle=z?"#a99":"#5a3a1a",q.fillRect(F-V*3-$*3,U-$*3-V*3,8,8),q.fillStyle=z?"#bbb":"#888",q.fillRect(F-V*2-$*5,U-$*2-V*5,5,12)}function v0(q,J){let Q=J.life/10;q.save(),q.globalAlpha=Q*0.35,q.fillStyle="#cc8844",q.fillRect(J.box.x,J.box.y,J.box.w,J.box.h),q.globalAlpha=Q,q.strokeStyle="#ddbb88",q.lineWidth=2,q.strokeRect(J.box.x,J.box.y,J.box.w,J.box.h),q.globalAlpha=Q*0.8,q.strokeStyle="#ffcc88",q.lineWidth=3;let[V,$]=k[J.dir];q.beginPath(),q.moveTo(J.box.x+J.box.w/2-V*18,J.box.y+J.box.h/2-$*18),q.lineTo(J.box.x+J.box.w/2+V*18,J.box.y+J.box.h/2+$*18),q.stroke(),q.restore()}function J0(q,J,Q){G0(q,J),u0(q,J),K0(q,Q),M0(q,Q)}function G0(q,J){q.fillStyle="#111",q.fillRect(20,20,140,14),q.fillStyle="#2a0a0a",q.fillRect(22,22,136,10);let F=Math.max(0,J.hp/J.maxHp),U=F>0.5?"#993333":F>0.25?"#994422":"#663322";q.fillStyle=U,q.fillRect(22,22,136*F,10),q.strokeStyle="#333",q.lineWidth=1,q.strokeRect(20,20,140,14),q.fillStyle="#bbb",q.font="10px monospace",q.textAlign="center",q.fillText(`HP ${J.hp}/${J.maxHp}`,90,31)}function u0(q,J){let Q=b-46;q.textAlign="center";let V=J.mode===P?"RANGED":"MELEE",$=J.mode===P?"#4488cc":"#cc6644";if(q.fillStyle="#0d0d0d",q.fillRect(N/2-95,Q-18,190,34),q.strokeStyle=$,q.lineWidth=2,q.strokeRect(N/2-95,Q-18,190,34),q.fillStyle=$,q.font="bold 17px monospace",q.fillText(`[ ${V} ]`,N/2,Q+8),q.fillStyle="#555",q.font="11px monospace",q.fillText("[Tab/Q] switch",N/2,Q-26),J.mode===P)q.strokeStyle="#88bbdd",q.lineWidth=2,q.beginPath(),q.moveTo(N/2-82,Q-4),q.lineTo(N/2-72,Q-4),q.stroke(),q.fillStyle="#88bbdd",q.fillRect(N/2-82,Q-8,10,8);else q.fillStyle="#ddbb88",q.beginPath(),q.moveTo(N/2-82,Q-10),q.lineTo(N/2-74,Q-2),q.lineTo(N/2-82,Q+4),q.fill()}function K0(q,J){let Q=J.enemies.filter((V)=>V.alive).length;if(q.textAlign="left",Q>0)q.fillStyle="#aa4444",q.font="13px monospace",q.fillText(`▶ ${Q}`,20,b-18);else if(!J.cleared&&J.type!=="spawn")q.fillStyle="#886633",q.font="13px monospace",q.fillText("Clear the room",20,b-18)}function M0(q,J){if(!J.visited)return;q.textAlign="right";let V={spawn:"START",normal:"",treasure:"TREASURE",boss:"BOSS"}[J.type];if(V)q.fillStyle="#555",q.font="11px monospace",q.fillText(V,N-20,v+D+30)}var h=14,A0=2;function Q0(q,J,Q,V){let $=h+A0,z=N-180,F=12;q.fillStyle="rgba(0,0,0,0.75)",q.fillRect(z-8,4,$*7+16,$*7+16),q.strokeStyle="#333",q.lineWidth=1,q.strokeRect(z-8,4,$*7+16,$*7+16);for(let U=-3;U<=3;U++)for(let X=-3;X<=3;X++){let Z=J.get(Q+X,V+U);if(!Z)continue;let _=z+(X+3)*$,G=12+(U+3)*$,A="#141414";if(Z.visited)A=Z.type==="spawn"?"#2a5a2a":Z.type==="boss"?"#5a1a1a":Z.type==="treasure"?"#5a5a1a":"#555";if(q.fillStyle=A,q.fillRect(_,G,h,h),Z.visited){if(q.strokeStyle="rgba(255,255,255,0.12)",q.lineWidth=1,Z.doors.up)q.fillRect(_+$/2-2,G-2,4,3);if(Z.doors.down)q.fillRect(_+$/2-2,G+h-1,4,3);if(Z.doors.left)q.fillRect(_-2,G+$/2-2,3,4);if(Z.doors.right)q.fillRect(_+h-1,G+$/2-2,3,4)}if(X===0&&U===0)q.strokeStyle="#ddd",q.lineWidth=2,q.strokeRect(_-1.5,G-1.5,h+3,h+3)}}class y{canvas;ctx;roomMap=new I;player=new T;cc=0;cr=0;meleeSwing=null;gameOver=!1;won=!1;constructor(q){this.canvas=q,this.ctx=q.getContext("2d"),this.enterRoom("up"),this.loop()}get curRoom(){return this.roomMap.get(this.cc,this.cr)}toggleMode(){this.player.mode=this.player.mode===P?a:P}restart(){this.gameOver=!1,this.won=!1,this.roomMap=new I,this.player=new T,this.cc=0,this.cr=0,this.meleeSwing=null,this.enterRoom("up")}enterRoom(q){let J=this.curRoom;J.visited=!0;let Q=B[q],[V,$]=k[q];if(this.player.x=u+Q.cx*j+j/2-V*j,this.player.y=v+Q.cy*j+j/2-$*j,this.player.facing=q,this.player.invTimer=20,this.player.transCD=15,this.meleeSwing=null,J.buildTiles(),J.enemies=[],J.tears=[],!J.cleared&&J.type!=="spawn")this.spawnEnemies(J,q);else J.cleared=!0,J.buildTiles()}spawnEnemies(q,J){let Q=q.type==="boss"?1:q.type==="treasure"?0:2+Math.floor(Math.random()*3);for(let V=0;V<Q;V++){let $=0,z,F,U,X=q.type==="boss"?"boss":Math.random()<0.3?"fast":"normal";do{z=u+2*j+Math.random()*(K-4)*j,F=v+2*j+Math.random()*(M-4)*j,U=!0;let Z=B[J],_=u+Z.cx*j+j/2,G=v+Z.cy*j+j/2;if(Math.hypot(z-_,F-G)<180)U=!1;for(let A of q.enemies)if(Math.hypot(z-A.x,F-A.y)<60){U=!1;break}if(Math.hypot(z-this.player.x,F-this.player.y)<150)U=!1;$++}while(!U&&$<100);q.enemies.push(new i(z,F,X))}}loop(){if(!this.gameOver&&!this.won)this.tick();this.render(),requestAnimationFrame(()=>this.loop())}tick(){let q=this.curRoom,J=this.player;if(J.invTimer>0)J.invTimer--;if(J.atkCD>0)J.atkCD--;if(J.transCD>0)J.transCD--;this.processMovement(J),this.processAttack(q,J),this.updateMelee(q),this.updateTears(q);let Q=this.updateEnemies(q,J);if(q.enemies.length>0&&Q===0&&!q.cleared)q.cleared=!0,q.buildTiles();if(c(this),!this.gameOver){if([...this.roomMap.rooms.values()].find(($)=>$.type==="boss")?.cleared)this.won=!0}}processMovement(q){let J=0,Q=0;if(H.w||H.W)Q=-1;if(H.s||H.S)Q=1;if(H.a||H.A)J=-1;if(H.d||H.D)J=1;if(J!==0||Q!==0){let V=Math.hypot(J,Q);if(J/=V,Q/=V,Q<0)q.moveDir="up";else if(Q>0)q.moveDir="down";if(J<0)q.moveDir="left";else if(J>0)q.moveDir="right";let $=J*q.speed,z=Q*q.speed;if(q.x+=$,C(q.box,this.curRoom,u,v))q.x-=$;if(q.y+=z,C(q.box,this.curRoom,u,v))q.y-=z}}processAttack(q,J){let Q=0,V=0;if(H.ArrowUp)Q=0,V=-1;else if(H.ArrowDown)Q=0,V=1;else if(H.ArrowLeft)Q=-1,V=0;else if(H.ArrowRight)Q=1,V=0;else if(H[" "]||H.Space)[Q,V]=k[J.moveDir];if((Q!==0||V!==0)&&J.atkCD<=0){let $=Math.hypot(Q,V);Q/=$,V/=$;let z=V<0?"up":V>0?"down":Q<0?"left":"right";if(J.facing=z,J.atkCD=J.mode===P?10:22,J.mode===P)q.tears.push(new d(J.x,J.y,Q,V));else this.meleeSwing=new n(J.x,J.y,z)}}updateMelee(q){if(this.meleeSwing&&!this.meleeSwing.alive)this.meleeSwing=null;if(!this.meleeSwing)return;this.meleeSwing.life--;for(let J of q.enemies){if(!J.alive||J.hitTimer>0)continue;if(x(J.box,this.meleeSwing.box)){J.hp-=this.meleeSwing.damage,J.hitTimer=10;let[Q,V]=k[this.meleeSwing.dir];J.knx=Q*this.meleeSwing.kb,J.kny=V*this.meleeSwing.kb}}}updateTears(q){for(let J of q.tears){if(!J.alive)continue;J.x+=J.dx*J.speed,J.y+=J.dy*J.speed,J.life--;let Q=Math.floor((J.x-u)/j),V=Math.floor((J.y-v)/j);if(Q<0||Q>=K||V<0||V>=M||J.life<=0){J.life=0;continue}if(q.tiles[V][Q]===Y){J.life=0;continue}for(let $ of q.enemies){if(!$.alive)continue;if(Math.hypot(J.x-$.x,J.y-$.y)<$.w/2+J.r){$.hp-=J.damage,$.hitTimer=8,J.life=0;break}}}q.tears=q.tears.filter((J)=>J.alive)}updateEnemies(q,J){let Q=0;for(let V of q.enemies){if(!V.alive)continue;if(Q++,V.hitTimer>0)V.hitTimer--;if(Math.abs(V.knx)>0.1||Math.abs(V.kny)>0.1){V.x+=V.knx*3,V.y+=V.kny*3,V.knx*=0.85,V.kny*=0.85;continue}V.knx=0,V.kny=0;let $=J.x-V.x,z=J.y-V.y,F=Math.hypot($,z);if(F>0&&F<500){let U=V.speed,X=$/F*U,Z=z/F*U;if(V.x+=X,C(V.box,q,u,v))V.x-=X;if(V.y+=Z,C(V.box,q,u,v))V.y-=Z}if(V.atkTimer>0)V.atkTimer--;if(Math.hypot(V.x-J.x,V.y-J.y)<(V.w+J.w)/2&&J.invTimer<=0&&V.atkTimer<=0){if(J.hp-=V.damage,J.invTimer=60,V.atkTimer=30,J.hp<=0)return this.gameOver=!0,Q}}return Q}render(){let q=this.ctx;if(q.fillStyle="#0a0a0f",q.fillRect(0,0,N,b),t(q,this.curRoom),q0(q,this.curRoom,this.player,this.meleeSwing),J0(q,this.player,this.curRoom),Q0(q,this.roomMap,this.cc,this.cr),this.gameOver)this.drawOverlay("#c33","GAME OVER");else if(this.won)this.drawOverlay("#3c3","VICTORY")}drawOverlay(q,J){let Q=this.ctx;Q.fillStyle="rgba(0,0,0,0.8)",Q.fillRect(0,0,N,b),Q.fillStyle=q,Q.font="bold 56px monospace",Q.textAlign="center",Q.fillText(J,N/2,b/2-20),Q.fillStyle="#888",Q.font="18px monospace",Q.fillText("[R] restart",N/2,b/2+40)}}l();window.addEventListener("keydown",(q)=>{let J=window.__game;if(!J)return;if((q.key==="Tab"||q.key==="q"||q.key==="Q")&&!J.gameOver&&!J.won)q.preventDefault(),J.toggleMode();if(q.key==="r"||q.key==="R"){if(J.gameOver||J.won)J.restart()}});window.addEventListener("load",()=>{let q=document.getElementById("game");if(!q){document.body.innerHTML='<p style="color:red">Error: canvas element not found</p>';return}let J=new y(q);window.__game=J});
+// src/input.ts
+var KEYS = {};
+function setupInput() {
+  window.addEventListener("keydown", (e) => {
+    KEYS[e.key] = true;
+    if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(e.key)) {
+      e.preventDefault();
+    }
+  });
+  window.addEventListener("keyup", (e) => {
+    KEYS[e.key] = false;
+  });
+  window.addEventListener("blur", () => {
+    for (const k in KEYS)
+      delete KEYS[k];
+  });
+}
 
-//# debugId=8155D39DF19FF28B64756E2164756E21
+// src/constants.ts
+var CW = 880;
+var CH = 660;
+var TILE = 44;
+var COLS = 15;
+var ROWS = 11;
+var RW = COLS * TILE;
+var RH = ROWS * TILE;
+var OX = (CW - RW) / 2;
+var OY = 80;
+var T_WALL = 0;
+var T_FLOOR = 1;
+var T_DOOR = 2;
+var MODE_RANGED = 0;
+var MODE_MELEE = 1;
+var DIR = {
+  up: [0, -1],
+  down: [0, 1],
+  left: [-1, 0],
+  right: [1, 0]
+};
+var OPP = {
+  up: "bottom",
+  down: "top",
+  left: "right",
+  right: "left"
+};
+var DOOR = {
+  up: { cols: [6, 7, 8], row: 0, cx: 7, cy: 0 },
+  down: { cols: [6, 7, 8], row: 10, cx: 7, cy: 10 },
+  left: { col: 0, rows: [4, 5, 6], cx: 0, cy: 5 },
+  right: { col: 14, rows: [4, 5, 6], cx: 14, cy: 5 }
+};
+var MAP_RADIUS = 3;
+var MIN_ROOMS = 8;
+var EXTRA_ROOMS = 4;
+
+// src/room/tiles.ts
+function buildTiles(doorState) {
+  const tiles = [];
+  for (let r = 0;r < ROWS; r++) {
+    tiles[r] = [];
+    for (let c = 0;c < COLS; c++) {
+      tiles[r][c] = r === 0 || r === ROWS - 1 || c === 0 || c === COLS - 1 ? T_WALL : T_FLOOR;
+    }
+  }
+  if (doorState)
+    placeDoors(tiles, doorState);
+  return tiles;
+}
+function placeDoors(tiles, doors) {
+  if (doors.up)
+    for (const c of DOOR.up.cols)
+      tiles[DOOR.up.row][c] = T_DOOR;
+  if (doors.down)
+    for (const c of DOOR.down.cols)
+      tiles[DOOR.down.row][c] = T_DOOR;
+  if (doors.left)
+    for (const r of DOOR.left.rows)
+      tiles[r][DOOR.left.col] = T_DOOR;
+  if (doors.right)
+    for (const r of DOOR.right.rows)
+      tiles[r][DOOR.right.col] = T_DOOR;
+}
+
+// src/math.ts
+function shuffle(a) {
+  for (let i = a.length - 1;i > 0; i--) {
+    const j = Math.random() * i | 0;
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function rand(a, b) {
+  return Math.random() * (b - a) + a;
+}
+function ri(a, b) {
+  return Math.floor(rand(a, b + 1));
+}
+function overlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+// src/room/Room.ts
+class Room {
+  c;
+  r;
+  type;
+  doors = { up: false, down: false, left: false, right: false };
+  visited = false;
+  cleared = false;
+  enemies = [];
+  tears = [];
+  tiles;
+  constructor(c, r, type) {
+    this.c = c;
+    this.r = r;
+    this.type = type;
+    this.tiles = buildTiles();
+  }
+  buildTiles() {
+    this.tiles = buildTiles(this.cleared || this.type === "spawn" ? this.doors : undefined);
+  }
+}
+
+// src/room/RoomMap.ts
+class RoomMap {
+  rooms = new Map;
+  key(c, r) {
+    return c + "," + r;
+  }
+  get(c, r) {
+    return this.rooms.get(this.key(c, r));
+  }
+  has(c, r) {
+    return this.rooms.has(this.key(c, r));
+  }
+  add(c, r, type) {
+    const room = new Room(c, r, type);
+    this.rooms.set(this.key(c, r), room);
+    return room;
+  }
+  hasBoss() {
+    for (const room of this.rooms.values()) {
+      if (room.type === "boss")
+        return true;
+    }
+    return false;
+  }
+  generate() {
+    this.add(0, 0, "spawn");
+    const frontier = [[0, 0]];
+    let count = 1;
+    const target = MIN_ROOMS + ri(0, EXTRA_ROOMS);
+    const dirs = [
+      ["up", 0, -1],
+      ["down", 0, 1],
+      ["left", -1, 0],
+      ["right", 1, 0]
+    ];
+    while (frontier.length > 0 && count < target) {
+      const idx = ri(0, frontier.length - 1);
+      const [cr, cc] = frontier[idx];
+      shuffle(dirs);
+      let added = false;
+      for (const [_d, dc, dr] of dirs) {
+        if (count >= target)
+          break;
+        const nc = cr + dc;
+        const nr = cc + dr;
+        if (Math.abs(nc) > MAP_RADIUS || Math.abs(nr) > MAP_RADIUS)
+          continue;
+        if (this.has(nc, nr))
+          continue;
+        let type = "normal";
+        if (!this.hasBoss() && (count === target - 1 || Math.random() < 0.2 && count >= 3)) {
+          type = "boss";
+        } else if (Math.random() < 0.12 && count >= 2) {
+          type = "treasure";
+        }
+        this.add(nc, nr, type);
+        const dir = _d;
+        this.get(cr, cc).doors[dir] = true;
+        this.get(nc, nr).doors[OPP[dir]] = true;
+        frontier.push([nc, nr]);
+        count++;
+        added = true;
+      }
+      if (!added)
+        frontier.splice(idx, 1);
+    }
+    if (!this.hasBoss()) {
+      const normals = [...this.rooms.values()].filter((r) => r.type === "normal");
+      if (normals.length > 0) {
+        normals[ri(0, normals.length - 1)].type = "boss";
+      }
+    }
+  }
+}
+
+// src/entities/Player.ts
+class Player {
+  x = 0;
+  y = 0;
+  w = 26;
+  h = 26;
+  speed = 3.2;
+  hp = 6;
+  maxHp = 6;
+  mode = MODE_RANGED;
+  facing = "up";
+  moveDir = "up";
+  atkCD = 0;
+  invTimer = 0;
+  transCD = 0;
+  get box() {
+    return { x: this.x - this.w / 2, y: this.y - this.h / 2, w: this.w, h: this.h };
+  }
+}
+
+// src/entities/Enemy.ts
+var STATS = {
+  normal: { w: 32, hp: 3, speed: 1.15, damage: 1 },
+  fast: { w: 26, hp: 2, speed: 1.9, damage: 1 },
+  boss: { w: 46, hp: 10, speed: 0.9, damage: 2 }
+};
+
+class Enemy {
+  x;
+  y;
+  type;
+  w;
+  h;
+  hp;
+  maxHp;
+  speed;
+  damage;
+  knx = 0;
+  kny = 0;
+  hitTimer = 0;
+  atkTimer = 0;
+  constructor(x, y, type) {
+    this.x = x;
+    this.y = y;
+    this.type = type;
+    const s = STATS[type];
+    this.w = s.w;
+    this.h = s.w;
+    this.hp = s.hp;
+    this.maxHp = s.hp;
+    this.speed = s.speed;
+    this.damage = s.damage;
+  }
+  get box() {
+    return { x: this.x - this.w / 2, y: this.y - this.h / 2, w: this.w, h: this.h };
+  }
+  get alive() {
+    return this.hp > 0;
+  }
+}
+
+// src/entities/Tear.ts
+class Tear {
+  x;
+  y;
+  dx;
+  dy;
+  r = 5;
+  speed = 7;
+  damage = 1;
+  life = 80;
+  constructor(x, y, dx, dy) {
+    this.x = x;
+    this.y = y;
+    this.dx = dx;
+    this.dy = dy;
+  }
+  get alive() {
+    return this.life > 0;
+  }
+}
+
+// src/entities/MeleeSwing.ts
+class MeleeSwing {
+  dir;
+  life = 10;
+  damage = 2;
+  kb = 10;
+  box;
+  constructor(x, y, dir) {
+    this.dir = dir;
+    const d = 22;
+    const s = 50;
+    const [dx, dy] = DIR[dir];
+    this.box = {
+      x: x + (dx > 0 ? d : dx < 0 ? -d - s : -s / 2),
+      y: y + (dy > 0 ? d : dy < 0 ? -d - s : -s / 2),
+      w: s,
+      h: s
+    };
+  }
+  get alive() {
+    return this.life > 0;
+  }
+}
+
+// src/game/collision.ts
+function isBlocked(room, col, row) {
+  if (row < 0 && room.doors.up && DOOR.up.cols.includes(col))
+    return false;
+  if (row >= ROWS && room.doors.down && DOOR.down.cols.includes(col))
+    return false;
+  if (col < 0 && room.doors.left && DOOR.left.rows.includes(row))
+    return false;
+  if (col >= COLS && room.doors.right && DOOR.right.rows.includes(row))
+    return false;
+  if (row < 0 || row >= ROWS || col < 0 || col >= COLS)
+    return true;
+  return room.tiles[row][col] === T_WALL;
+}
+function collidesWall(box, room, ox, oy) {
+  const l = Math.floor((box.x - ox) / TILE_SIZE);
+  const r = Math.floor((box.x + box.w - ox) / TILE_SIZE);
+  const t = Math.floor((box.y - oy) / TILE_SIZE);
+  const b = Math.floor((box.y + box.h - oy) / TILE_SIZE);
+  for (let row = t;row <= b; row++) {
+    for (let col = l;col <= r; col++) {
+      if (isBlocked(room, col, row))
+        return true;
+    }
+  }
+  return false;
+}
+var TILE_SIZE = 44;
+
+// src/game/transitions.ts
+var ENTRY_KEYS = {
+  up: ["w", "W", "ArrowUp"],
+  down: ["s", "S", "ArrowDown"],
+  left: ["a", "A", "ArrowLeft"],
+  right: ["d", "D", "ArrowRight"]
+};
+function keyPressed(dir) {
+  for (const k of ENTRY_KEYS[dir]) {
+    if (KEYS[k])
+      return true;
+  }
+  return false;
+}
+function checkTransition(game) {
+  if (game.gameOver || game.won)
+    return;
+  if (game.player.transCD > 0)
+    return;
+  const p = game.player;
+  const room = game.curRoom;
+  if (!room.cleared)
+    return;
+  const col = Math.floor((p.x - OX) / TILE);
+  const row = Math.floor((p.y - OY) / TILE);
+  if (row === 0 && room.doors.up && DOOR.up.cols.includes(col) && keyPressed("up")) {
+    if (game.roomMap.has(game.cc, game.cr - 1)) {
+      game.cr--;
+      game.enterRoom("down");
+      return;
+    }
+  }
+  if (row === ROWS - 1 && room.doors.down && DOOR.down.cols.includes(col) && keyPressed("down")) {
+    if (game.roomMap.has(game.cc, game.cr + 1)) {
+      game.cr++;
+      game.enterRoom("up");
+      return;
+    }
+  }
+  if (col === 0 && room.doors.left && DOOR.left.rows.includes(row) && keyPressed("left")) {
+    if (game.roomMap.has(game.cc - 1, game.cr)) {
+      game.cc--;
+      game.enterRoom("right");
+      return;
+    }
+  }
+  if (col === COLS - 1 && room.doors.right && DOOR.right.rows.includes(row) && keyPressed("right")) {
+    if (game.roomMap.has(game.cc + 1, game.cr)) {
+      game.cc++;
+      game.enterRoom("left");
+      return;
+    }
+  }
+}
+
+// src/render/roomRenderer.ts
+function drawRoom(ctx, room) {
+  for (let r = 0;r < ROWS; r++) {
+    for (let c = 0;c < COLS; c++) {
+      const x = OX + c * TILE;
+      const y = OY + r * TILE;
+      const t = room.tiles[r][c];
+      if (t === T_WALL) {
+        ctx.fillStyle = "#1a1a24";
+        ctx.fillRect(x, y, TILE, TILE);
+        ctx.fillStyle = "#242436";
+        ctx.fillRect(x + 2, y + 2, TILE - 4, TILE - 4);
+        ctx.fillStyle = "#1e1e2c";
+        ctx.fillRect(x + 4, y + 4, TILE - 8, TILE - 8);
+        ctx.strokeStyle = "#161620";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, y + TILE / 2);
+        ctx.lineTo(x + TILE, y + TILE / 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x + TILE / 2, y);
+        ctx.lineTo(x + TILE / 2, y + TILE / 2);
+        ctx.stroke();
+      } else if (t === T_DOOR) {
+        ctx.fillStyle = "#0d0d14";
+        ctx.fillRect(x, y, TILE, TILE);
+        ctx.fillStyle = "#2a1e0e";
+        ctx.fillRect(x + 6, y + 6, TILE - 12, TILE - 12);
+        ctx.fillStyle = "#3a2e14";
+        ctx.fillRect(x + 10, y + 10, TILE - 20, TILE - 20);
+      } else {
+        const dark = (r + c) % 2 === 0;
+        ctx.fillStyle = dark ? "#2e2e24" : "#353528";
+        ctx.fillRect(x, y, TILE, TILE);
+      }
+    }
+  }
+  ctx.strokeStyle = "rgba(0,0,0,0.3)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(OX, OY, RW, RH);
+}
+
+// src/render/entityRenderer.ts
+function drawEntities(ctx, room, player, meleeSwing) {
+  for (const e of room.enemies) {
+    if (!e.alive)
+      continue;
+    const flash = e.hitTimer > 0 && e.hitTimer % 4 < 2;
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.beginPath();
+    ctx.ellipse(e.x + 2, e.y + e.h / 4, e.w / 3, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (e.type === "boss") {
+      drawBoss(ctx, e, flash);
+    } else if (e.type === "fast") {
+      drawFastEnemy(ctx, e, flash);
+    } else {
+      drawNormalEnemy(ctx, e, flash);
+    }
+    ctx.restore();
+  }
+  drawPlayer(ctx, player);
+  for (const t of room.tears) {
+    if (!t.alive)
+      continue;
+    ctx.save();
+    ctx.fillStyle = "#6699cc";
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, t.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#99bbee";
+    ctx.beginPath();
+    ctx.arc(t.x - 1.5, t.y - 1.5, t.r - 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  if (meleeSwing && meleeSwing.alive) {
+    drawMeleeSwing(ctx, meleeSwing);
+  }
+}
+function drawBoss(ctx, e, flash) {
+  ctx.fillStyle = flash ? "#ddd" : "#5a0a0a";
+  ctx.beginPath();
+  ctx.arc(e.x, e.y, e.w / 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#4a0808";
+  ctx.beginPath();
+  ctx.arc(e.x - 3, e.y - 3, e.w / 2 - 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = flash ? "#000" : "#ff3333";
+  ctx.beginPath();
+  ctx.arc(e.x - 8, e.y - 8, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(e.x + 8, e.y - 8, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#000";
+  ctx.beginPath();
+  ctx.arc(e.x - 8, e.y - 8, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(e.x + 8, e.y - 8, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = flash ? "#bbb" : "#3a0505";
+  ctx.beginPath();
+  ctx.moveTo(e.x - 16, e.y - e.w / 2 + 4);
+  ctx.lineTo(e.x - 8, e.y - e.w / 2 - 16);
+  ctx.lineTo(e.x, e.y - e.w / 2 + 4);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(e.x - 4, e.y - e.w / 2 + 4);
+  ctx.lineTo(e.x + 4, e.y - e.w / 2 - 16);
+  ctx.lineTo(e.x + 12, e.y - e.w / 2 + 4);
+  ctx.fill();
+  if (e.hp < e.maxHp) {
+    ctx.fillStyle = "#222";
+    ctx.fillRect(e.x - 22, e.y - e.h / 2 - 14, 44, 4);
+    ctx.fillStyle = "#c33";
+    ctx.fillRect(e.x - 22, e.y - e.h / 2 - 14, 44 * (e.hp / e.maxHp), 4);
+  }
+}
+function drawFastEnemy(ctx, e, flash) {
+  ctx.fillStyle = flash ? "#ddd" : "#992222";
+  ctx.beginPath();
+  ctx.arc(e.x, e.y, e.w / 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#771111";
+  ctx.beginPath();
+  ctx.arc(e.x - 1, e.y - 1, e.w / 2 - 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#ff4444";
+  ctx.beginPath();
+  ctx.arc(e.x - 5, e.y - 4, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(e.x + 5, e.y - 4, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#000";
+  ctx.beginPath();
+  ctx.arc(e.x - 5, e.y - 5, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(e.x + 5, e.y - 5, 1.5, 0, Math.PI * 2);
+  ctx.fill();
+}
+function drawNormalEnemy(ctx, e, flash) {
+  ctx.fillStyle = flash ? "#ccc" : "#5a4a2e";
+  ctx.fillRect(e.x - e.w / 2, e.y - e.h / 2, e.w, e.h);
+  ctx.fillStyle = "#4a3a1e";
+  ctx.fillRect(e.x - e.w / 2 + 3, e.y - e.h / 2 + 3, e.w - 6, e.h - 6);
+  ctx.fillStyle = "#332816";
+  ctx.fillRect(e.x - e.w / 2 + 6, e.y - e.h / 2 + 6, e.w - 12, e.h - 12);
+  ctx.fillStyle = "#ffcc66";
+  ctx.fillRect(e.x - 7, e.y - 5, 5, 5);
+  ctx.fillRect(e.x + 2, e.y - 5, 5, 5);
+  ctx.fillStyle = "#000";
+  ctx.fillRect(e.x - 6, e.y - 4, 3, 3);
+  ctx.fillRect(e.x + 3, e.y - 4, 3, 3);
+}
+function drawPlayer(ctx, p) {
+  ctx.save();
+  const flash = p.invTimer > 0 && p.invTimer % 6 < 3;
+  const bodyColor = p.mode === 0 ? "#2a6a9a" : "#9a3a2a";
+  ctx.fillStyle = flash ? "#ddd" : bodyColor;
+  ctx.fillRect(p.x - p.w / 2, p.y - p.h / 2, p.w, p.h);
+  ctx.fillStyle = flash ? "#ccc" : "rgba(0,0,0,0.3)";
+  ctx.fillRect(p.x - p.w / 2 + 3, p.y - p.h / 2 + 3, p.w - 6, p.h - 6);
+  const [fx, fy] = DIR[p.facing];
+  const wx = p.x + fx * (p.w / 2 + 4);
+  const wy = p.y + fy * (p.h / 2 + 4);
+  if (p.mode === 0) {
+    drawPistol(ctx, p, wx, wy, fx, fy, flash);
+  } else {
+    drawKnife(ctx, wx, wy, fx, fy, flash);
+  }
+  ctx.fillStyle = "#fff";
+  const ex = p.x + fx * 5;
+  const ey = p.y + fy * 5;
+  ctx.fillRect(ex - 5, ey - 4, 4, 5);
+  ctx.fillRect(ex + 1, ey - 4, 4, 5);
+  ctx.fillStyle = "#111";
+  ctx.fillRect(ex - 4 + fx, ey - 3 + fy, 2, 3);
+  ctx.fillRect(ex + 2 + fx, ey - 3 + fy, 2, 3);
+  ctx.restore();
+}
+function drawPistol(ctx, p, wx, wy, fx, fy, flash) {
+  ctx.strokeStyle = flash ? "#999" : "#555";
+  ctx.lineWidth = 3;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(wx, wy);
+  ctx.lineTo(wx + fx * 14 + fy * 2, wy + fy * 14 + fx * 2);
+  ctx.stroke();
+  ctx.fillStyle = flash ? "#aaa" : "#444";
+  ctx.save();
+  const angle = fy !== 0 ? Math.PI / 2 * (fy < 0 ? -1 : 1) : fx < 0 ? Math.PI : 0;
+  ctx.translate(p.x + fx * 8, p.y + fy * 8);
+  ctx.rotate(angle);
+  ctx.fillRect(-7, -4, 14, 8);
+  ctx.restore();
+  if (p.atkCD > 8 && p.mode === 0) {
+    ctx.fillStyle = "rgba(255,200,50,0.6)";
+    ctx.beginPath();
+    ctx.arc(wx + fx * 16, wy + fy * 16, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,200,0.4)";
+    ctx.beginPath();
+    ctx.arc(wx + fx * 18, wy + fy * 18, 8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+function drawKnife(ctx, wx, wy, fx, fy, flash) {
+  ctx.strokeStyle = flash ? "#bbb" : "#ccc";
+  ctx.lineWidth = 2;
+  const kx = wx + fx * 6;
+  const ky = wy + fy * 6;
+  ctx.beginPath();
+  ctx.moveTo(kx, ky);
+  ctx.lineTo(kx + fx * 16 - fy * 6, ky + fy * 16 + fx * 6);
+  ctx.lineTo(kx + fx * 16 + fy * 6, ky + fy * 16 - fx * 6);
+  ctx.closePath();
+  ctx.fillStyle = flash ? "#ddd" : "#d4d4d4";
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = flash ? "#a99" : "#5a3a1a";
+  ctx.fillRect(kx - fx * 3 - fy * 3, ky - fy * 3 - fx * 3, 8, 8);
+  ctx.fillStyle = flash ? "#bbb" : "#888";
+  ctx.fillRect(kx - fx * 2 - fy * 5, ky - fy * 2 - fx * 5, 5, 12);
+}
+function drawMeleeSwing(ctx, s) {
+  const alpha = s.life / 10;
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.35;
+  ctx.fillStyle = "#cc8844";
+  ctx.fillRect(s.box.x, s.box.y, s.box.w, s.box.h);
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = "#ddbb88";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(s.box.x, s.box.y, s.box.w, s.box.h);
+  ctx.globalAlpha = alpha * 0.8;
+  ctx.strokeStyle = "#ffcc88";
+  ctx.lineWidth = 3;
+  const [dx, dy] = DIR[s.dir];
+  ctx.beginPath();
+  ctx.moveTo(s.box.x + s.box.w / 2 - dx * 18, s.box.y + s.box.h / 2 - dy * 18);
+  ctx.lineTo(s.box.x + s.box.w / 2 + dx * 18, s.box.y + s.box.h / 2 + dy * 18);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// src/render/hudRenderer.ts
+function drawHUD(ctx, player, room) {
+  drawHPBar(ctx, player);
+  drawModeIndicator(ctx, player);
+  drawEnemyCount(ctx, room);
+  drawRoomLabel(ctx, room);
+}
+function drawHPBar(ctx, p) {
+  const bx = 20, by = 20, bw = 140, bh = 14;
+  ctx.fillStyle = "#111";
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.fillStyle = "#2a0a0a";
+  ctx.fillRect(bx + 2, by + 2, bw - 4, bh - 4);
+  const ratio = Math.max(0, p.hp / p.maxHp);
+  const color = ratio > 0.5 ? "#993333" : ratio > 0.25 ? "#994422" : "#663322";
+  ctx.fillStyle = color;
+  ctx.fillRect(bx + 2, by + 2, (bw - 4) * ratio, bh - 4);
+  ctx.strokeStyle = "#333";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(bx, by, bw, bh);
+  ctx.fillStyle = "#bbb";
+  ctx.font = "10px monospace";
+  ctx.textAlign = "center";
+  ctx.fillText(`HP ${p.hp}/${p.maxHp}`, bx + bw / 2, by + bh - 3);
+}
+function drawModeIndicator(ctx, p) {
+  const my = CH - 46;
+  ctx.textAlign = "center";
+  const label = p.mode === MODE_RANGED ? "RANGED" : "MELEE";
+  const color = p.mode === MODE_RANGED ? "#4488cc" : "#cc6644";
+  ctx.fillStyle = "#0d0d0d";
+  ctx.fillRect(CW / 2 - 95, my - 18, 190, 34);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(CW / 2 - 95, my - 18, 190, 34);
+  ctx.fillStyle = color;
+  ctx.font = "bold 17px monospace";
+  ctx.fillText(`[ ${label} ]`, CW / 2, my + 8);
+  ctx.fillStyle = "#555";
+  ctx.font = "11px monospace";
+  ctx.fillText("[Tab/Q] switch", CW / 2, my - 26);
+  if (p.mode === MODE_RANGED) {
+    ctx.strokeStyle = "#88bbdd";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(CW / 2 - 82, my - 4);
+    ctx.lineTo(CW / 2 - 72, my - 4);
+    ctx.stroke();
+    ctx.fillStyle = "#88bbdd";
+    ctx.fillRect(CW / 2 - 82, my - 8, 10, 8);
+  } else {
+    ctx.fillStyle = "#ddbb88";
+    ctx.beginPath();
+    ctx.moveTo(CW / 2 - 82, my - 10);
+    ctx.lineTo(CW / 2 - 74, my - 2);
+    ctx.lineTo(CW / 2 - 82, my + 4);
+    ctx.fill();
+  }
+}
+function drawEnemyCount(ctx, room) {
+  const alive = room.enemies.filter((e) => e.alive).length;
+  ctx.textAlign = "left";
+  if (alive > 0) {
+    ctx.fillStyle = "#aa4444";
+    ctx.font = "13px monospace";
+    ctx.fillText(`▶ ${alive}`, 20, CH - 18);
+  } else if (!room.cleared && room.type !== "spawn") {
+    ctx.fillStyle = "#886633";
+    ctx.font = "13px monospace";
+    ctx.fillText("Clear the room", 20, CH - 18);
+  }
+}
+function drawRoomLabel(ctx, room) {
+  if (!room.visited)
+    return;
+  ctx.textAlign = "right";
+  const labels = { spawn: "START", normal: "", treasure: "TREASURE", boss: "BOSS" };
+  const label = labels[room.type];
+  if (label) {
+    ctx.fillStyle = "#555";
+    ctx.font = "11px monospace";
+    ctx.fillText(label, CW - 20, OY + RH + 30);
+  }
+}
+
+// src/render/minimapRenderer.ts
+var CELL = 14;
+var GAP = 2;
+function drawMinimap(ctx, map, cc, cr) {
+  const cs = CELL + GAP;
+  const mx = CW - 180;
+  const my = 12;
+  ctx.fillStyle = "rgba(0,0,0,0.75)";
+  ctx.fillRect(mx - 8, my - 8, cs * 7 + 16, cs * 7 + 16);
+  ctx.strokeStyle = "#333";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(mx - 8, my - 8, cs * 7 + 16, cs * 7 + 16);
+  for (let r = -3;r <= 3; r++) {
+    for (let c = -3;c <= 3; c++) {
+      const room = map.get(cc + c, cr + r);
+      if (!room)
+        continue;
+      const x = mx + (c + 3) * cs;
+      const y = my + (r + 3) * cs;
+      let color = "#141414";
+      if (room.visited) {
+        color = room.type === "spawn" ? "#2a5a2a" : room.type === "boss" ? "#5a1a1a" : room.type === "treasure" ? "#5a5a1a" : "#555";
+      }
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, CELL, CELL);
+      if (room.visited) {
+        ctx.strokeStyle = "rgba(255,255,255,0.12)";
+        ctx.lineWidth = 1;
+        if (room.doors.up)
+          ctx.fillRect(x + cs / 2 - 2, y - 2, 4, 3);
+        if (room.doors.down)
+          ctx.fillRect(x + cs / 2 - 2, y + CELL - 1, 4, 3);
+        if (room.doors.left)
+          ctx.fillRect(x - 2, y + cs / 2 - 2, 3, 4);
+        if (room.doors.right)
+          ctx.fillRect(x + CELL - 1, y + cs / 2 - 2, 3, 4);
+      }
+      if (c === 0 && r === 0) {
+        ctx.strokeStyle = "#ddd";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x - 1.5, y - 1.5, CELL + 3, CELL + 3);
+      }
+    }
+  }
+}
+
+// src/game/Game.ts
+class Game {
+  canvas;
+  ctx;
+  roomMap = new RoomMap;
+  player = new Player;
+  cc = 0;
+  cr = 0;
+  meleeSwing = null;
+  gameOver = false;
+  won = false;
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
+    this.enterRoom("up");
+    this.loop();
+  }
+  get curRoom() {
+    return this.roomMap.get(this.cc, this.cr);
+  }
+  toggleMode() {
+    this.player.mode = this.player.mode === MODE_RANGED ? MODE_MELEE : MODE_RANGED;
+  }
+  restart() {
+    this.gameOver = false;
+    this.won = false;
+    this.roomMap = new RoomMap;
+    this.player = new Player;
+    this.cc = 0;
+    this.cr = 0;
+    this.meleeSwing = null;
+    this.enterRoom("up");
+  }
+  enterRoom(fromDir) {
+    const room = this.curRoom;
+    room.visited = true;
+    const d = DOOR[fromDir];
+    const [ddc, ddr] = DIR[fromDir];
+    this.player.x = OX + d.cx * TILE + TILE / 2 - ddc * TILE;
+    this.player.y = OY + d.cy * TILE + TILE / 2 - ddr * TILE;
+    this.player.facing = fromDir;
+    this.player.invTimer = 20;
+    this.player.transCD = 15;
+    this.meleeSwing = null;
+    room.buildTiles();
+    room.enemies = [];
+    room.tears = [];
+    if (!room.cleared && room.type !== "spawn") {
+      this.spawnEnemies(room, fromDir);
+    } else {
+      room.cleared = true;
+      room.buildTiles();
+    }
+  }
+  spawnEnemies(room, entryDir) {
+    const count = room.type === "boss" ? 1 : room.type === "treasure" ? 0 : 2 + Math.floor(Math.random() * 3);
+    for (let i = 0;i < count; i++) {
+      let tries = 0;
+      let x, y, ok;
+      const type = room.type === "boss" ? "boss" : Math.random() < 0.3 ? "fast" : "normal";
+      do {
+        x = OX + 2 * TILE + Math.random() * (COLS - 4) * TILE;
+        y = OY + 2 * TILE + Math.random() * (ROWS - 4) * TILE;
+        ok = true;
+        const ed = DOOR[entryDir];
+        const dx = OX + ed.cx * TILE + TILE / 2;
+        const dy = OY + ed.cy * TILE + TILE / 2;
+        if (Math.hypot(x - dx, y - dy) < 180)
+          ok = false;
+        for (const e of room.enemies) {
+          if (Math.hypot(x - e.x, y - e.y) < 60) {
+            ok = false;
+            break;
+          }
+        }
+        if (Math.hypot(x - this.player.x, y - this.player.y) < 150)
+          ok = false;
+        tries++;
+      } while (!ok && tries < 100);
+      room.enemies.push(new Enemy(x, y, type));
+    }
+  }
+  loop() {
+    if (!this.gameOver && !this.won)
+      this.tick();
+    this.render();
+    requestAnimationFrame(() => this.loop());
+  }
+  tick() {
+    const room = this.curRoom;
+    const p = this.player;
+    if (p.invTimer > 0)
+      p.invTimer--;
+    if (p.atkCD > 0)
+      p.atkCD--;
+    if (p.transCD > 0)
+      p.transCD--;
+    this.processMovement(p);
+    this.processAttack(room, p);
+    this.updateMelee(room);
+    this.updateTears(room);
+    const aliveCount = this.updateEnemies(room, p);
+    if (room.enemies.length > 0 && aliveCount === 0 && !room.cleared) {
+      room.cleared = true;
+      room.buildTiles();
+    }
+    checkTransition(this);
+    if (!this.gameOver) {
+      const bossRoom = [...this.roomMap.rooms.values()].find((r) => r.type === "boss");
+      if (bossRoom?.cleared)
+        this.won = true;
+    }
+  }
+  processMovement(p) {
+    let mx = 0, my = 0;
+    if (KEYS["w"] || KEYS["W"])
+      my = -1;
+    if (KEYS["s"] || KEYS["S"])
+      my = 1;
+    if (KEYS["a"] || KEYS["A"])
+      mx = -1;
+    if (KEYS["d"] || KEYS["D"])
+      mx = 1;
+    if (mx !== 0 || my !== 0) {
+      const len = Math.hypot(mx, my);
+      mx /= len;
+      my /= len;
+      if (my < 0)
+        p.moveDir = "up";
+      else if (my > 0)
+        p.moveDir = "down";
+      if (mx < 0)
+        p.moveDir = "left";
+      else if (mx > 0)
+        p.moveDir = "right";
+      const dx = mx * p.speed;
+      const dy = my * p.speed;
+      p.x += dx;
+      if (collidesWall(p.box, this.curRoom, OX, OY))
+        p.x -= dx;
+      p.y += dy;
+      if (collidesWall(p.box, this.curRoom, OX, OY))
+        p.y -= dy;
+    }
+  }
+  processAttack(room, p) {
+    let ax = 0, ay = 0;
+    if (KEYS["ArrowUp"]) {
+      ax = 0;
+      ay = -1;
+    } else if (KEYS["ArrowDown"]) {
+      ax = 0;
+      ay = 1;
+    } else if (KEYS["ArrowLeft"]) {
+      ax = -1;
+      ay = 0;
+    } else if (KEYS["ArrowRight"]) {
+      ax = 1;
+      ay = 0;
+    } else if (KEYS[" "] || KEYS["Space"]) {
+      [ax, ay] = DIR[p.moveDir];
+    }
+    if ((ax !== 0 || ay !== 0) && p.atkCD <= 0) {
+      const len = Math.hypot(ax, ay);
+      ax /= len;
+      ay /= len;
+      const dn = ay < 0 ? "up" : ay > 0 ? "down" : ax < 0 ? "left" : "right";
+      p.facing = dn;
+      p.atkCD = p.mode === MODE_RANGED ? 10 : 22;
+      if (p.mode === MODE_RANGED) {
+        room.tears.push(new Tear(p.x, p.y, ax, ay));
+      } else {
+        this.meleeSwing = new MeleeSwing(p.x, p.y, dn);
+      }
+    }
+  }
+  updateMelee(room) {
+    if (this.meleeSwing && !this.meleeSwing.alive)
+      this.meleeSwing = null;
+    if (!this.meleeSwing)
+      return;
+    this.meleeSwing.life--;
+    for (const e of room.enemies) {
+      if (!e.alive || e.hitTimer > 0)
+        continue;
+      if (overlap(e.box, this.meleeSwing.box)) {
+        e.hp -= this.meleeSwing.damage;
+        e.hitTimer = 10;
+        const [dx, dy] = DIR[this.meleeSwing.dir];
+        e.knx = dx * this.meleeSwing.kb;
+        e.kny = dy * this.meleeSwing.kb;
+      }
+    }
+  }
+  updateTears(room) {
+    for (const t of room.tears) {
+      if (!t.alive)
+        continue;
+      t.x += t.dx * t.speed;
+      t.y += t.dy * t.speed;
+      t.life--;
+      const col = Math.floor((t.x - OX) / TILE);
+      const row = Math.floor((t.y - OY) / TILE);
+      if (col < 0 || col >= COLS || row < 0 || row >= ROWS || t.life <= 0) {
+        t.life = 0;
+        continue;
+      }
+      if (room.tiles[row][col] === T_WALL) {
+        t.life = 0;
+        continue;
+      }
+      for (const e of room.enemies) {
+        if (!e.alive)
+          continue;
+        if (Math.hypot(t.x - e.x, t.y - e.y) < e.w / 2 + t.r) {
+          e.hp -= t.damage;
+          e.hitTimer = 8;
+          t.life = 0;
+          break;
+        }
+      }
+    }
+    room.tears = room.tears.filter((t) => t.alive);
+  }
+  updateEnemies(room, p) {
+    let aliveCount = 0;
+    for (const e of room.enemies) {
+      if (!e.alive)
+        continue;
+      aliveCount++;
+      if (e.hitTimer > 0)
+        e.hitTimer--;
+      if (Math.abs(e.knx) > 0.1 || Math.abs(e.kny) > 0.1) {
+        e.x += e.knx * 3;
+        e.y += e.kny * 3;
+        e.knx *= 0.85;
+        e.kny *= 0.85;
+        continue;
+      }
+      e.knx = 0;
+      e.kny = 0;
+      const dx = p.x - e.x;
+      const dy = p.y - e.y;
+      const d = Math.hypot(dx, dy);
+      if (d > 0 && d < 500) {
+        const s = e.speed;
+        const mx = dx / d * s;
+        const my = dy / d * s;
+        e.x += mx;
+        if (collidesWall(e.box, room, OX, OY))
+          e.x -= mx;
+        e.y += my;
+        if (collidesWall(e.box, room, OX, OY))
+          e.y -= my;
+      }
+      if (e.atkTimer > 0)
+        e.atkTimer--;
+      if (Math.hypot(e.x - p.x, e.y - p.y) < (e.w + p.w) / 2 && p.invTimer <= 0 && e.atkTimer <= 0) {
+        p.hp -= e.damage;
+        p.invTimer = 60;
+        e.atkTimer = 30;
+        if (p.hp <= 0) {
+          this.gameOver = true;
+          return aliveCount;
+        }
+      }
+    }
+    return aliveCount;
+  }
+  render() {
+    const ctx = this.ctx;
+    ctx.fillStyle = "#0a0a0f";
+    ctx.fillRect(0, 0, CW, CH);
+    drawRoom(ctx, this.curRoom);
+    drawEntities(ctx, this.curRoom, this.player, this.meleeSwing);
+    drawHUD(ctx, this.player, this.curRoom);
+    drawMinimap(ctx, this.roomMap, this.cc, this.cr);
+    if (this.gameOver)
+      this.drawOverlay("#c33", "GAME OVER");
+    else if (this.won)
+      this.drawOverlay("#3c3", "VICTORY");
+  }
+  drawOverlay(color, text) {
+    const ctx = this.ctx;
+    ctx.fillStyle = "rgba(0,0,0,0.8)";
+    ctx.fillRect(0, 0, CW, CH);
+    ctx.fillStyle = color;
+    ctx.font = "bold 56px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(text, CW / 2, CH / 2 - 20);
+    ctx.fillStyle = "#888";
+    ctx.font = "18px monospace";
+    ctx.fillText("[R] restart", CW / 2, CH / 2 + 40);
+  }
+}
+
+// src/main.ts
+setupInput();
+window.addEventListener("keydown", (e) => {
+  const game = window.__game;
+  if (!game)
+    return;
+  if ((e.key === "Tab" || e.key === "q" || e.key === "Q") && !game.gameOver && !game.won) {
+    e.preventDefault();
+    game.toggleMode();
+  }
+  if (e.key === "r" || e.key === "R") {
+    if (game.gameOver || game.won)
+      game.restart();
+  }
+});
+window.addEventListener("load", () => {
+  const canvas = document.getElementById("game");
+  if (!canvas) {
+    document.body.innerHTML = '<p style="color:red">Error: canvas element not found</p>';
+    return;
+  }
+  const game = new Game(canvas);
+  window.__game = game;
+});

@@ -4,9 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun build src/main.ts --outdir dist --target browser --watch",
+    "dev": "bun run dev.ts",
     "build": "bun run build.ts",
-    "serve": "bun build src/main.ts --outdir dist --target browser && cp src/index.html dist/",
     "start": "bun run build && echo 'open dist/index.html'"
   }
 }
