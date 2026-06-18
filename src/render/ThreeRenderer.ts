@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {
-  CW, CH, OX, OY, TILE, COLS, ROWS,
-  T_WALL, T_DOOR, MODE_RANGED, PROJECTILE,
+  CW, CH, OX, OY, TILE, COLS, ROWS, RW, RH,
+  DIR, MODE_RANGED, PROJECTILE, MELEE,
 } from '../config';
 import { lerp } from '../core/util';
 import type { Game } from '../core/Game';
@@ -10,137 +10,213 @@ import type { Enemy } from '../core/entities/Enemy';
 import type { Projectile } from '../core/entities/Projectile';
 import type { Renderer } from './Renderer';
 import { DEFAULT_THEME, type Theme } from './theme';
-
-/** Z-слои: больше значение — ближе к камере (рисуется поверх). */
-const Z = { floor: 0, wall: 1, door: 0.5, swing: 4, entity: 5, tear: 6 };
+import { Assets, type SpriteKey } from './assets';
 
 /**
- * Все материалы — DoubleSide. Наша ортокамера переворачивает ось Y
- * (top=0 сверху), из-за чего инвертируется порядок вершин и при обычном
- * отсечении задних граней плоскости становятся невидимыми. DoubleSide
- * рисует грань с обеих сторон — для плоского 2D это правильный выбор.
- */
-function flatMat(params: THREE.MeshBasicMaterialParameters = {}): THREE.MeshBasicMaterial {
-  return new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, ...params });
-}
-
-/**
- * Рендер мира на three.js с ОРТОГРАФИЧЕСКОЙ камерой: 3D-движок, но картинка
- * плоская 2D-сверху (как у настоящего Isaac). Мировые координаты совпадают
- * с пиксельными координатами логики (x вправо, y вниз), поэтому вся
- * математика ядра остаётся валидной без пересчётов.
+ * Псевдо-3D рендер «как в Isaac»: наклонная перспективная камера, пол лежит
+ * плоско, а персонажи/враги — ВЕРТИКАЛЬНЫЕ спрайты-биллборды, стоящие на полу.
  *
- * Управление ресурсами:
- *  • геометрии-«единицы» (unitPlane/unitCircle) общие и переиспользуются
- *    масштабированием — не плодим геометрии;
- *  • тайлы комнаты пересобираются ТОЛЬКО при смене комнаты;
- *  • меши сущностей создаются/удаляются по мере появления/исчезновения
- *    (mark-and-sweep), их персональные материалы корректно dispose-ятся.
+ * КАРТА КООРДИНАТ: игровая логика остаётся 2D-сверху (x, y). В 3D мы кладём
+ * y на ось Z: мировая точка = (x, высота, y). Пол — плоскость Y=0; вверх — +Y.
+ * Поэтому ВСЯ математика и КОЛЛИЗИИ ядра без изменений: хитбоксы по-прежнему на
+ * полу (footprint спрайта), псевдо-3D — чисто визуальный слой.
+ *
+ * Камера фиксированная на комнату (как в Isaac), кадрирует всю комнату.
  */
+
+// ── Параметры вида (крути для настройки картинки) ─────────────
+const WALL_H = 38;            // высота стен
+const SPRITE_SCALE = 1.5;     // ширина спрайта = размер хитбокса × это
+const SPRITE_ASPECT = 64 / 48; // высота/ширина спрайта (из канваса ассета)
+const SHADOW_Y = 0.6;         // тень чуть над полом (без z-fighting)
+const TEAR_Y = 13;            // высота полёта снаряда
+const GAP = 3 * TILE;         // ширина дверного проёма (3 тайла)
+
+type EnemyVisual = { sprite: THREE.Mesh; shadow: THREE.Mesh; lastHit: number };
+type Effect = { mesh: THREE.Mesh; life: number; max: number; vy: number; grow: number };
+
 export class ThreeRenderer implements Renderer {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
-  private readonly camera: THREE.OrthographicCamera;
+  private readonly camera: THREE.PerspectiveCamera;
+  private readonly assets = new Assets();
+  private readonly theme: Theme;
 
-  // Общие геометрии-единицы (масштабируем под размер сущности).
-  private readonly unitPlane = new THREE.PlaneGeometry(1, 1);
-  private readonly unitCircle = new THREE.CircleGeometry(0.5, 24);
+  // Общие геометрии.
+  private readonly vGeo = new THREE.PlaneGeometry(1, 1);   // вертикальный спрайт/стена
+  private readonly flatGeo = new THREE.PlaneGeometry(1, 1); // лежит на полу (повёрнут)
 
-  // Общие материалы тайлов (без пер-тайлового мигания — можно шарить).
-  private readonly tileMats: Record<string, THREE.MeshBasicMaterial>;
+  // Общие материалы.
+  private readonly floorMat: THREE.MeshBasicMaterial;
+  private readonly wallMat: THREE.MeshBasicMaterial;
+  private readonly shadowMat: THREE.MeshBasicMaterial;
+  private readonly playerMat: Record<'ranged' | 'melee', THREE.MeshBasicMaterial>;
+  private readonly enemyMatKey: Record<Enemy['type'], SpriteKey> = {
+    normal: 'enemy-normal', fast: 'enemy-fast', boss: 'enemy-boss',
+  };
 
-  // Группа статичных тайлов текущей комнаты.
+  // Группа статичной геометрии комнаты (пол + стены + двери).
   private roomGroup = new THREE.Group();
   private renderedRoom: Room | null = null;
+  private renderedCleared = false;
 
-  // Динамические меши с персональными материалами.
+  // Динамика.
   private readonly playerMesh: THREE.Mesh;
-  private readonly enemyMeshes = new Map<Enemy, THREE.Mesh>();
+  private readonly playerShadow: THREE.Mesh;
+  private readonly enemyVisuals = new Map<Enemy, EnemyVisual>();
   private readonly tearMeshes = new Map<Projectile, THREE.Mesh>();
   private readonly swingMesh: THREE.Mesh;
-
-  private readonly theme: Theme;
+  private readonly effects: Effect[] = [];
+  private lastAtkCD = 0;
 
   constructor(canvas: HTMLCanvasElement, theme: Theme = DEFAULT_THEME) {
     this.theme = theme;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.setSize(CW, CH, false);
-    this.renderer.setClearColor(this.theme.bg, 1);
+    this.renderer.setClearColor(theme.bg, 1);
 
-    // Ортокамера: world (0,0) — верхний левый угол, (CW,CH) — нижний правый.
-    this.camera = new THREE.OrthographicCamera(0, CW, 0, CH, 0.1, 1000);
-    this.camera.position.z = 100;
+    // Наклонная камера, кадрирует комнату с юга-сверху.
+    this.camera = new THREE.PerspectiveCamera(44, CW / CH, 1, 4000);
+    const cx = OX + RW / 2;
+    const cz = OY + RH / 2;
+    // Наклонный «исааковский» ракурс: камера приподнята и отодвинута на юг.
+    this.camera.position.set(cx, 650, cz + 560);
+    this.camera.lookAt(cx, 40, cz);
 
-    this.tileMats = {
-      floorA: flatMat({ color: this.theme.floorA }),
-      floorB: flatMat({ color: this.theme.floorB }),
-      wall: flatMat({ color: this.theme.wall }),
-      door: flatMat({ color: this.theme.door }),
-    };
+    // Материалы.
+    const floorTex = this.assets.floor();
+    floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
+    floorTex.repeat.set(COLS, ROWS);
+    this.floorMat = new THREE.MeshBasicMaterial({ map: floorTex });
+
+    const wallTex = this.assets.wall();
+    wallTex.wrapS = wallTex.wrapT = THREE.RepeatWrapping;
+    wallTex.repeat.set(4, 1);
+    this.wallMat = new THREE.MeshBasicMaterial({ map: wallTex, side: THREE.DoubleSide });
+
+    this.shadowMat = new THREE.MeshBasicMaterial({
+      map: this.assets.shadow(), transparent: true, depthWrite: false,
+    });
+
+    const spriteMat = (key: SpriteKey) =>
+      new THREE.MeshBasicMaterial({ map: this.assets.sprite(key), transparent: true, alphaTest: 0.5, side: THREE.DoubleSide });
+    this.playerMat = { ranged: spriteMat('player-ranged'), melee: spriteMat('player-melee') };
 
     this.scene.add(this.roomGroup);
 
-    this.playerMesh = new THREE.Mesh(this.unitPlane, flatMat({ color: this.theme.playerRanged }));
-    this.playerMesh.position.z = Z.entity;
+    this.playerShadow = this.flatMesh(this.shadowMat);
+    this.scene.add(this.playerShadow);
+    this.playerMesh = new THREE.Mesh(this.vGeo, this.playerMat.ranged);
     this.scene.add(this.playerMesh);
 
-    this.swingMesh = new THREE.Mesh(
-      this.unitPlane,
-      flatMat({ color: this.theme.swing, transparent: true, opacity: 0.45 }),
+    this.swingMesh = this.flatMesh(
+      new THREE.MeshBasicMaterial({
+        map: this.assets.spark(), color: new THREE.Color(this.theme.swing),
+        transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+      }),
     );
-    this.swingMesh.position.z = Z.swing;
     this.swingMesh.visible = false;
     this.scene.add(this.swingMesh);
   }
 
   render(game: Game, alpha: number): void {
     const room = game.curRoom;
-    if (room !== this.renderedRoom) this.buildRoom(room);
+    if (room !== this.renderedRoom || room.cleared !== this.renderedCleared) {
+      this.buildRoom(room);
+    }
 
     this.syncPlayer(game, alpha);
     this.syncEnemies(room, alpha);
     this.syncTears(room, alpha);
     this.syncSwing(game);
+    this.updateEffects();
 
     this.renderer.render(this.scene, this.camera);
   }
 
-  // ── Статичная геометрия комнаты ───────────────────────────
+  // ── Статика комнаты: пол, стены, двери ────────────────────
 
   private buildRoom(room: Room): void {
     this.clearGroup(this.roomGroup);
     this.renderedRoom = room;
+    this.renderedCleared = room.cleared;
 
-    for (let r = 0; r < ROWS; r++) {
-      for (let c = 0; c < COLS; c++) {
-        const t = room.tiles[r][c];
-        let mat: THREE.MeshBasicMaterial;
-        let z = Z.floor;
-        if (t === T_WALL) { mat = this.tileMats.wall; z = Z.wall; }
-        else if (t === T_DOOR) { mat = this.tileMats.door; z = Z.door; }
-        else { mat = (r + c) % 2 === 0 ? this.tileMats.floorA : this.tileMats.floorB; }
+    // Пол — одна плоскость на весь периметр, ПЛАШМЯ (flatMesh кладёт её
+    // горизонтально; без этого пол стоял бы вертикально и перспектива «выворачивалась»).
+    const floor = this.flatMesh(this.floorMat);
+    floor.scale.set(RW, RH, 1);
+    floor.position.set(OX + RW / 2, 0, OY + RH / 2);
+    this.roomGroup.add(floor);
 
-        const mesh = new THREE.Mesh(this.unitPlane, mat);
-        mesh.scale.set(TILE, TILE, 1);
-        mesh.position.set(OX + c * TILE + TILE / 2, OY + r * TILE + TILE / 2, z);
-        this.roomGroup.add(mesh);
-      }
+    // Стены по сторонам с проёмами под двери.
+    const xGap: [number, number] | null =
+      room.doors.up || room.doors.down ? [OX + 6 * TILE, OX + 6 * TILE + GAP] : null;
+    const zGap: [number, number] | null =
+      room.doors.left || room.doors.right ? [OY + 4 * TILE, OY + 4 * TILE + GAP] : null;
+    this.addWall('x', OY, OX, OX + RW, room.doors.up ? xGap : null);          // север
+    this.addWall('x', OY + RH, OX, OX + RW, room.doors.down ? xGap : null);   // юг
+    this.addWall('z', OX, OY, OY + RH, room.doors.left ? zGap : null);        // запад
+    this.addWall('z', OX + RW, OY, OY + RH, room.doors.right ? zGap : null);  // восток
+
+    // Двери (всегда видны: закрыты в бою, открыты после зачистки).
+    const open = room.cleared;
+    if (room.doors.up) this.addDoor('x', OX + 7.5 * TILE, OY, open);
+    if (room.doors.down) this.addDoor('x', OX + 7.5 * TILE, OY + RH, open);
+    if (room.doors.left) this.addDoor('z', OX, OY + 5.5 * TILE, open);
+    if (room.doors.right) this.addDoor('z', OX + RW, OY + 5.5 * TILE, open);
+  }
+
+  /** Вертикальная стена вдоль оси axis на координате edge от a до b, с проёмом gap. */
+  private addWall(axis: 'x' | 'z', edge: number, a: number, b: number, gap: [number, number] | null): void {
+    const segs: Array<[number, number]> = gap
+      ? [[a, gap[0]], [gap[1], b]].filter(([s, e]) => e - s > 1) as Array<[number, number]>
+      : [[a, b]];
+    for (const [s, e] of segs) {
+      const mesh = new THREE.Mesh(this.vGeo, this.wallMat);
+      const mid = (s + e) / 2;
+      mesh.scale.set(e - s, WALL_H, 1);
+      if (axis === 'x') mesh.position.set(mid, WALL_H / 2, edge);
+      else { mesh.rotation.y = Math.PI / 2; mesh.position.set(edge, WALL_H / 2, mid); }
+      this.roomGroup.add(mesh);
     }
   }
 
-  // ── Динамические сущности ─────────────────────────────────
+  /** Дверь в проёме: вертикальный спрайт (закрытая/открытая). */
+  private addDoor(axis: 'x' | 'z', x: number, edgeOrZ: number, open: boolean): void {
+    const mat = new THREE.MeshBasicMaterial({ map: this.assets.door(open), transparent: true, alphaTest: 0.3, side: THREE.DoubleSide });
+    const mesh = new THREE.Mesh(this.vGeo, mat);
+    mesh.scale.set(GAP, WALL_H, 1);
+    if (axis === 'x') mesh.position.set(x, WALL_H / 2, edgeOrZ);
+    else { mesh.rotation.y = Math.PI / 2; mesh.position.set(x, WALL_H / 2, edgeOrZ); }
+    mesh.userData.disposable = true; // материал двери персональный — освобождаем
+    this.roomGroup.add(mesh);
+  }
+
+  // ── Динамика ──────────────────────────────────────────────
 
   private syncPlayer(game: Game, alpha: number): void {
     const p = game.player;
     const x = lerp(p.prevX, p.x, alpha);
-    const y = lerp(p.prevY, p.y, alpha);
-    this.playerMesh.position.set(x, y, Z.entity);
-    this.playerMesh.scale.set(p.w, p.h, 1);
+    const z = lerp(p.prevY, p.y, alpha);
 
-    const base = p.mode === MODE_RANGED ? this.theme.playerRanged : this.theme.playerMelee;
-    const flashing = p.invTimer > 0 && p.invTimer % 6 < 3;
-    (this.playerMesh.material as THREE.MeshBasicMaterial).color.setHex(flashing ? this.theme.flash : base);
+    this.playerMesh.material = p.mode === MODE_RANGED ? this.playerMat.ranged : this.playerMat.melee;
+    const w = p.w * SPRITE_SCALE;
+    const h = w * SPRITE_ASPECT;
+    this.playerMesh.scale.set(w, h, 1);
+    this.playerMesh.position.set(x, h / 2, z);
+    this.placeShadow(this.playerShadow, x, z, p.w);
+
+    // I-frames: мигаем спрайтом (классические кадры неуязвимости).
+    this.playerMesh.visible = !(p.invTimer > 0 && p.invTimer % 6 < 3);
+
+    // Вспышка из дула при выстреле (atkCD «подскочил» вверх).
+    if (p.mode === MODE_RANGED && p.atkCD > this.lastAtkCD) {
+      const [dx, dz] = DIR[p.facing];
+      this.spawnEffect(this.assets.muzzle(), this.theme.flash,
+        x + dx * (p.w * 0.7), h * 0.55, z + dz * (p.w * 0.7), 16, 6, { vy: 0, grow: 1.04 });
+    }
+    this.lastAtkCD = p.atkCD;
   }
 
   private syncEnemies(room: Room, alpha: number): void {
@@ -149,25 +225,44 @@ export class ThreeRenderer implements Renderer {
       if (!e.alive) continue;
       live.add(e);
 
-      let mesh = this.enemyMeshes.get(e);
-      if (!mesh) {
-        const geo = e.type === 'normal' ? this.unitPlane : this.unitCircle;
-        mesh = new THREE.Mesh(geo, flatMat());
-        mesh.position.z = Z.entity;
-        this.scene.add(mesh);
-        this.enemyMeshes.set(e, mesh);
+      let v = this.enemyVisuals.get(e);
+      if (!v) {
+        const mat = new THREE.MeshBasicMaterial({
+          map: this.assets.sprite(this.enemyMatKey[e.type]), transparent: true, alphaTest: 0.5, side: THREE.DoubleSide,
+        });
+        const sprite = new THREE.Mesh(this.vGeo, mat);
+        const shadow = this.flatMesh(this.shadowMat);
+        this.scene.add(sprite, shadow);
+        v = { sprite, shadow, lastHit: 0 };
+        this.enemyVisuals.set(e, v);
       }
 
       const x = lerp(e.prevX, e.x, alpha);
-      const y = lerp(e.prevY, e.y, alpha);
-      mesh.position.set(x, y, Z.entity);
-      mesh.scale.set(e.w, e.h, 1);
+      const z = lerp(e.prevY, e.y, alpha);
+      const pop = 1 + 0.18 * (e.hitTimer / Math.max(1, MELEE.life)); // «дёргается» при попадании
+      const w = e.w * SPRITE_SCALE * pop;
+      const h = w * SPRITE_ASPECT;
+      v.sprite.scale.set(w, h, 1);
+      v.sprite.position.set(x, h / 2, z);
+      this.placeShadow(v.shadow, x, z, e.w);
 
-      const base = e.type === 'fast' ? this.theme.enemyFast : e.type === 'boss' ? this.theme.enemyBoss : this.theme.enemyNormal;
-      const flashing = e.hitTimer > 0 && e.hitTimer % 4 < 2;
-      (mesh.material as THREE.MeshBasicMaterial).color.setHex(flashing ? this.theme.flash : base);
+      // Искра в момент попадания (hitTimer вырос).
+      if (e.hitTimer > v.lastHit) {
+        this.spawnEffect(this.assets.spark(), this.theme.flash, x, e.w * 0.6, z, e.w * 0.9, 8, { vy: 0.6, grow: 1.06 });
+      }
+      v.lastHit = e.hitTimer;
     }
-    this.sweep(this.enemyMeshes, live);
+
+    // Уборка: исчезнувшие враги. Если враг мёртв — «пуф» на месте гибели.
+    for (const [e, v] of this.enemyVisuals) {
+      if (live.has(e)) continue;
+      if (!e.alive) {
+        this.spawnEffect(this.assets.puff(), 0xffffff, e.x, e.w * 0.6, e.y, e.w * 1.2, 14, { vy: 1.1, grow: 1.07 });
+      }
+      this.scene.remove(v.sprite, v.shadow);
+      (v.sprite.material as THREE.Material).dispose();
+      this.enemyVisuals.delete(e);
+    }
   }
 
   private syncTears(room: Room, alpha: number): void {
@@ -175,56 +270,106 @@ export class ThreeRenderer implements Renderer {
     for (const t of room.tears) {
       if (!t.alive) continue;
       live.add(t);
-
       let mesh = this.tearMeshes.get(t);
       if (!mesh) {
-        mesh = new THREE.Mesh(this.unitCircle, flatMat({ color: this.theme.tear }));
-        mesh.position.z = Z.tear;
-        mesh.scale.set(PROJECTILE.radius * 2, PROJECTILE.radius * 2, 1);
+        mesh = new THREE.Mesh(this.vGeo, new THREE.MeshBasicMaterial({
+          map: this.assets.tear(), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+        }));
+        const s = PROJECTILE.radius * 4;
+        mesh.scale.set(s, s, 1);
         this.scene.add(mesh);
         this.tearMeshes.set(t, mesh);
       }
-      mesh.position.set(lerp(t.prevX, t.x, alpha), lerp(t.prevY, t.y, alpha), Z.tear);
+      mesh.position.set(lerp(t.prevX, t.x, alpha), TEAR_Y, lerp(t.prevY, t.y, alpha));
     }
-    this.sweep(this.tearMeshes, live);
+    for (const [t, mesh] of this.tearMeshes) {
+      if (live.has(t)) continue;
+      this.scene.remove(mesh);
+      (mesh.material as THREE.Material).dispose();
+      this.tearMeshes.delete(t);
+    }
   }
 
   private syncSwing(game: Game): void {
     const s = game.meleeSwing;
     if (!s || !s.alive) { this.swingMesh.visible = false; return; }
     this.swingMesh.visible = true;
-    this.swingMesh.position.set(s.box.x + s.box.w / 2, s.box.y + s.box.h / 2, Z.swing);
-    this.swingMesh.scale.set(s.box.w, s.box.h, 1);
-    (this.swingMesh.material as THREE.MeshBasicMaterial).opacity = 0.45 * (s.life / 10);
+    this.swingMesh.position.set(s.box.x + s.box.w / 2, 2, s.box.y + s.box.h / 2);
+    this.swingMesh.scale.set(s.box.w * 1.4, s.box.h * 1.4, 1);
+    (this.swingMesh.material as THREE.MeshBasicMaterial).opacity = 0.8 * (s.life / MELEE.life);
   }
 
-  // ── Утилиты управления ресурсами ──────────────────────────
+  // ── Эффекты (частицы-биллборды) ───────────────────────────
 
-  /** Удаляет меши, чьих сущностей больше нет, освобождая их материалы. */
-  private sweep<K>(map: Map<K, THREE.Mesh>, live: Set<K>): void {
-    for (const [key, mesh] of map) {
-      if (live.has(key)) continue;
-      this.scene.remove(mesh);
-      (mesh.material as THREE.Material).dispose();
-      map.delete(key);
+  private spawnEffect(
+    tex: THREE.Texture, color: number, x: number, y: number, z: number,
+    size: number, life: number, opts: { vy: number; grow: number },
+  ): void {
+    const mesh = new THREE.Mesh(this.vGeo, new THREE.MeshBasicMaterial({
+      map: tex, color: new THREE.Color(color), transparent: true,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    mesh.scale.set(size, size, 1);
+    mesh.position.set(x, y, z);
+    this.scene.add(mesh);
+    this.effects.push({ mesh, life, max: life, vy: opts.vy, grow: opts.grow });
+  }
+
+  private updateEffects(): void {
+    for (let i = this.effects.length - 1; i >= 0; i--) {
+      const fx = this.effects[i];
+      fx.life--;
+      const mat = fx.mesh.material as THREE.MeshBasicMaterial;
+      if (fx.life <= 0) {
+        this.scene.remove(fx.mesh);
+        mat.dispose();
+        this.effects.splice(i, 1);
+        continue;
+      }
+      mat.opacity = fx.life / fx.max;
+      fx.mesh.position.y += fx.vy;
+      fx.mesh.scale.multiplyScalar(fx.grow);
     }
   }
 
+  // ── Хелперы ───────────────────────────────────────────────
+
+  /** Плоский (лежащий на полу) меш из общей геометрии. */
+  private flatMesh(mat: THREE.Material): THREE.Mesh {
+    const m = new THREE.Mesh(this.flatGeo, mat);
+    m.rotation.x = -Math.PI / 2; // положить плашмя, нормаль вверх
+    return m;
+  }
+
+  private placeShadow(shadow: THREE.Mesh, x: number, z: number, footprint: number): void {
+    shadow.position.set(x, SHADOW_Y, z);
+    shadow.scale.set(footprint * 1.4, footprint * 0.9, 1);
+  }
+
   private clearGroup(group: THREE.Group): void {
-    // Материалы и геометрия тайлов общие (живут весь срок рендера),
-    // поэтому здесь только убираем меши из сцены — без dispose.
+    for (const child of group.children) {
+      // Общие материалы (пол/стены) не трогаем; персональные (двери) — освобождаем.
+      if ((child as THREE.Mesh).userData?.disposable) {
+        ((child as THREE.Mesh).material as THREE.Material).dispose();
+      }
+    }
     group.clear();
   }
 
   dispose(): void {
     this.clearGroup(this.roomGroup);
-    this.sweep(this.enemyMeshes, new Set());
-    this.sweep(this.tearMeshes, new Set());
-    (this.playerMesh.material as THREE.Material).dispose();
+    for (const v of this.enemyVisuals.values()) (v.sprite.material as THREE.Material).dispose();
+    for (const m of this.tearMeshes.values()) (m.material as THREE.Material).dispose();
+    for (const fx of this.effects) (fx.mesh.material as THREE.Material).dispose();
     (this.swingMesh.material as THREE.Material).dispose();
-    this.unitPlane.dispose();
-    this.unitCircle.dispose();
-    for (const m of Object.values(this.tileMats)) m.dispose();
+    this.floorMat.dispose();
+    this.wallMat.dispose();
+    this.shadowMat.dispose();
+    this.playerMat.ranged.dispose();
+    this.playerMat.melee.dispose();
+    this.vGeo.dispose();
+    this.flatGeo.dispose();
+    this.assets.dispose();
     this.renderer.dispose();
   }
 }

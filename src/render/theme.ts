@@ -1,48 +1,25 @@
 /**
- * theme.ts — ВНЕШНИЙ ВИД мира (задел под кастомные ассеты).
+ * theme.ts — цвета-ТИНТЫ, которыми пользуется рендер напрямую.
  *
- * Сейчас «ассеты» — это просто цвета примитивов (квадраты/круги). Но рендер
- * берёт их отсюда, а не из хардкода, поэтому вид легко подменить, не трогая
- * логику: можно завести несколько тем или, в перспективе, расширить Theme
- * полями со спрайтами/текстурами (см. комментарий ниже) и научить
- * ThreeRenderer вешать их на материалы.
+ * Основной внешний вид мира (пол, стены, двери, персонажи, снаряды) теперь живёт
+ * в текстурах `render/assets.ts` (процедурные спрайты). Сюда вынесено лишь то, что
+ * рендер задаёт цветом материала, а не текстурой:
+ *   • bg    — цвет фона (clear color) сцены;
+ *   • swing — тинт спрайта взмаха ближнего боя;
+ *   • flash — тинт вспышек/искр (дуло, попадание).
+ *
+ * Хочешь полностью сменить стиль — меняй ассеты (см. `docs/HOWTO.md` и
+ * `docs/ASSET_BRIEF.md`); хочешь подкрутить фон/эффекты — здесь.
  */
 export interface Theme {
-  /** Цвета (0xRRGGBB) элементов мира. */
-  bg: number;
-  floorA: number;
-  floorB: number;
-  wall: number;
-  door: number;
-  playerRanged: number;
-  playerMelee: number;
-  enemyNormal: number;
-  enemyFast: number;
-  enemyBoss: number;
-  tear: number;
-  swing: number;
-  flash: number; // цвет «вспышки» при попадании/неуязвимости
-
-  // ── Задел на будущее (пока не используется) ───────────────
-  // Чтобы перейти со сплошных цветов на картинки, добавь сюда, например:
-  //   textures?: { floor?: string; wall?: string; player?: string; ... }
-  // (URL/путь к изображению), загрузи их через THREE.TextureLoader в
-  // ThreeRenderer и положи в material.map вместо/вместе с color.
+  bg: number;    // фон сцены (0xRRGGBB)
+  swing: number; // тинт взмаха ближнего боя
+  flash: number; // тинт вспышек/искр
 }
 
-/** Тема по умолчанию — текущая «тёмное подземелье». */
+/** Тема по умолчанию — «тёмное подземелье». */
 export const DEFAULT_THEME: Theme = {
-  bg: 0x0a0a0f,
-  floorA: 0x2e2e24,
-  floorB: 0x353528,
-  wall: 0x242436,
-  door: 0x3a2e14,
-  playerRanged: 0x2a6a9a,
-  playerMelee: 0x9a3a2a,
-  enemyNormal: 0x5a4a2e,
-  enemyFast: 0x992222,
-  enemyBoss: 0x5a0a0a,
-  tear: 0x6699cc,
+  bg: 0x1c1c28,
   swing: 0xcc8844,
   flash: 0xdddddd,
 };

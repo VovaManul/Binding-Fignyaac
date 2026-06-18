@@ -27,8 +27,8 @@ export class HudOverlay implements Renderer {
     this.drawHud(game);
     this.drawMinimap(game);
 
-    if (game.gameOver) this.drawOverlay('#c33', 'GAME OVER');
-    else if (game.won) this.drawOverlay('#3c3', 'VICTORY');
+    if (game.gameOver) this.drawOverlay('#c33', 'ИГРА ОКОНЧЕНА');
+    else if (game.won) this.drawOverlay('#3c3', 'ПОБЕДА');
   }
 
   dispose(): void {
@@ -58,7 +58,7 @@ export class HudOverlay implements Renderer {
     // Индикатор режима боя.
     const my = CH - 46;
     const ranged = p.mode === MODE_RANGED;
-    const mText = ranged ? 'RANGED' : 'MELEE';
+    const mText = ranged ? 'ДАЛЬНИЙ' : 'БЛИЖНИЙ';
     const mCol = ranged ? '#4488cc' : '#cc6644';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#0d0d0d'; ctx.fillRect(CW / 2 - 95, my - 18, 190, 34);
