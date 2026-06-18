@@ -5,9 +5,14 @@ import type { Dir } from '../core/types';
  * Раскладка: WASD — движение, стрелки — прицельная стрельба, пробел —
  * атака по ходу движения, Tab/Q — смена оружия, R — рестарт.
  *
- * Контроллер держит набор зажатых клавиш и «защёлкивает» однократные
- * действия (смена оружия/рестарт). Раз в кадр вызывается poll(), который
- * собирает InputState и сбрасывает однократные флаги.
+ * ВАЖНО: используем `event.code` (ФИЗИЧЕСКАЯ клавиша), а не `event.key`.
+ * `code` не зависит от раскладки, поэтому WASD/Q/R работают и в русской
+ * раскладке (где те же клавиши дают «цфыв»/«й»/«к»). Стрелки/Tab/пробел в
+ * `code` называются ArrowUp/Tab/Space.
+ *
+ * Контроллер держит набор зажатых клавиш и «защёлкивает» однократные действия
+ * (смена оружия/рестарт). Раз в кадр вызывается poll(), который собирает
+ * InputState и сбрасывает однократные флаги.
  */
 export class KeyboardController {
   private held = new Set<string>();
@@ -16,18 +21,18 @@ export class KeyboardController {
   private attached = false;
 
   private onKeyDown = (e: KeyboardEvent): void => {
-    const k = e.key;
+    const c = e.code;
     // Однократные действия ловим по факту нажатия (не по удержанию).
-    if (!this.held.has(k)) {
-      if (k === 'Tab' || k === 'q' || k === 'Q') this.toggleWeaponEdge = true;
-      if (k === 'r' || k === 'R') this.restartEdge = true;
+    if (!this.held.has(c)) {
+      if (c === 'Tab' || c === 'KeyQ') this.toggleWeaponEdge = true;
+      if (c === 'KeyR') this.restartEdge = true;
     }
-    this.held.add(k);
-    if (PREVENT.has(k)) e.preventDefault();
+    this.held.add(c);
+    if (PREVENT.has(c)) e.preventDefault();
   };
 
   private onKeyUp = (e: KeyboardEvent): void => {
-    this.held.delete(e.key);
+    this.held.delete(e.code);
   };
 
   private onBlur = (): void => {
@@ -57,14 +62,14 @@ export class KeyboardController {
 
   /** Собрать снимок ввода и сбросить однократные флаги. */
   poll(): InputState {
-    const down = (k: string) => this.held.has(k);
+    const down = (code: string) => this.held.has(code);
 
     let moveX = 0;
     let moveY = 0;
-    if (down('w') || down('W')) moveY -= 1;
-    if (down('s') || down('S')) moveY += 1;
-    if (down('a') || down('A')) moveX -= 1;
-    if (down('d') || down('D')) moveX += 1;
+    if (down('KeyW')) moveY -= 1;
+    if (down('KeyS')) moveY += 1;
+    if (down('KeyA')) moveX -= 1;
+    if (down('KeyD')) moveX += 1;
 
     let aimDir: Dir | null = null;
     if (down('ArrowUp')) aimDir = 'up';
@@ -76,7 +81,7 @@ export class KeyboardController {
       moveX,
       moveY,
       aimDir,
-      attackHeld: down(' ') || down('Spacebar'),
+      attackHeld: down('Space'),
       toggleWeapon: this.toggleWeaponEdge,
       restart: this.restartEdge,
     };
@@ -87,7 +92,7 @@ export class KeyboardController {
   }
 }
 
-/** Клавиши, у которых гасим стандартное поведение браузера (скролл и т.п.). */
+/** Физические клавиши (e.code), у которых гасим поведение браузера (скролл/таб). */
 const PREVENT = new Set([
-  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'Spacebar', 'Tab',
+  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Tab',
 ]);

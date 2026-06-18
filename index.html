@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dungeon Crawl — three.js</title>
+  <title>Биндим Фигняшку</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -27,11 +27,14 @@
     /* Стартовое меню — поверх холстов, перекрывает сцену своим фоном. */
     #menu {
       position: absolute; inset: 0; z-index: 10;
-      background: #0a0a0fee;
+      /* фон-картинка с тёмным затемнением для читаемости; фолбэк — тёмный цвет */
+      background: linear-gradient(rgba(10,10,15,0.7), rgba(10,10,15,0.82)),
+                  url(assets/menu-bg.png) center / cover no-repeat, #0a0a0f;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       gap: 14px; padding: 24px;
     }
-    #menu h1 { font-size: 40px; letter-spacing: 4px; color: #c9b27a; }
+    #menu h1 { font-size: 40px; letter-spacing: 4px; color: #c9b27a; margin-bottom: 4px; }
+    #menu-logo { display: block; width: min(560px, 80%); height: auto; }
     .menu-sub { color: #888; margin-bottom: 6px; }
     #menu-presets { display: flex; flex-direction: column; gap: 10px; width: 360px; max-width: 90%; }
     .menu-preset {
@@ -55,7 +58,7 @@
 
     <!-- Стартовое меню. Кнопки уровней генерирует StartMenu из PRESETS. -->
     <div id="menu">
-      <h1>DUNGEON CRAWL</h1>
+      <h1><img id="menu-logo" src="assets/logo.png" alt="Биндим Фигняшку" /></h1>
       <p class="menu-sub">Выбери уровень</p>
       <div id="menu-presets"></div>
       <p class="menu-hint">WASD — движение · Стрелки — стрельба · Tab — оружие · Esc — меню</p>

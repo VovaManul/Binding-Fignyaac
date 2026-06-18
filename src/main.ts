@@ -55,9 +55,9 @@ function boot(): void {
   const menu = new StartMenu(menuEl, PRESETS, startGame);
   menu.show();
 
-  // Esc во время игры — вернуться к выбору уровня.
+  // Esc во время игры — вернуться к выбору уровня (по физической клавише).
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && loop) {
+    if (e.code === 'Escape' && loop) {
       e.preventDefault();
       toMenu();
     }

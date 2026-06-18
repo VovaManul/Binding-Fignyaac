@@ -7,7 +7,7 @@
 ## Что это
 
 Top-down рогалик (в духе Binding of Isaac). Логика — чистый TypeScript
-(`src/core/`), рендер — three.js с ортокамерой (`src/render/`), сборка/тесты — Bun.
+(`src/core/`), рендер — three.js в псевдо-3D (наклонная `PerspectiveCamera`, `src/render/`), сборка/тесты — Bun.
 Обзор — [`README.md`](./README.md), детали — [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md),
 рецепты доработки — [`docs/HOWTO.md`](./docs/HOWTO.md).
 
@@ -64,8 +64,9 @@ bun run check      # typecheck + test
 | форму комнаты/тайлы | `src/core/world/tiles.ts`, `Room.ts` |
 | коллизии | `src/core/systems/collision.ts` |
 | расстановку врагов | `src/core/systems/spawner.ts` |
-| как рисуется мир | `src/render/ThreeRenderer.ts` |
-| цвета/внешний вид/ассеты мира | `src/render/theme.ts` |
+| как рисуется мир (псевдо-3D) | `src/render/ThreeRenderer.ts` |
+| спрайты/текстуры (графика) | `src/render/assets.ts` (бриф на художку — `docs/ASSET_BRIEF.md`) |
+| цвета/тинты/фон | `src/render/theme.ts` |
 | HUD/миникарту | `src/render/HudOverlay.ts` |
 | стартовое меню | `src/ui/StartMenu.ts` |
 | раскладку клавиш | `src/input/KeyboardController.ts` |
@@ -80,8 +81,9 @@ bun run check      # typecheck + test
   Если карта пустая — `curRoom` будет `undefined` и всё упадёт на старте.
 - **`OPP` направлений.** Противоположное к `up` — это `down`, к `left` — `right`.
   Любая другая раскладка ломает встречные двери и связность карты.
-- **Чёрный экран при работающем рендере.** Ортокамера инвертирует Y → нужен
-  `DoubleSide` на материалах, иначе грани отсекаются.
+- **Пол «выворачивает» перспективу.** Пол в псевдо-3D надо класть ПЛАШМЯ
+  (`flatMesh`, поворот −90° вокруг X). Без поворота он встаёт вертикально и вид
+  ломается. Спрайты/стены — `DoubleSide` (камера переворачивает Y, иначе грани отсекаются).
 - **Canvas вылезает за рамки.** Холстам нужен CSS-размер (`width/height:100%`),
   иначе они показываются в размер HiDPI-буфера.
 - **Комната без врагов не открывается.** Если в комнате 0 врагов (сокровищница) —
