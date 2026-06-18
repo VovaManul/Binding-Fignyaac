@@ -1,4 +1,4 @@
-import type { InputState } from './InputState';
+import type { InputSource, InputState } from './InputState';
 import type { Dir } from '../core/types';
 
 /**
@@ -14,7 +14,7 @@ import type { Dir } from '../core/types';
  * (смена оружия/рестарт). Раз в кадр вызывается poll(), который собирает
  * InputState и сбрасывает однократные флаги.
  */
-export class KeyboardController {
+export class KeyboardController implements InputSource {
   private held = new Set<string>();
   private toggleWeaponEdge = false;
   private restartEdge = false;

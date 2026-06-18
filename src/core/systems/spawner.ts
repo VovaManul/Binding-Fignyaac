@@ -6,6 +6,23 @@ import type { Dir, EnemyType } from '../types';
 import type { Rng } from '../rng';
 import { DEFAULT_RULES, type LevelRules } from '../rules';
 
+function isSpawnSpotClear(
+  x: number,
+  y: number,
+  doorX: number,
+  doorY: number,
+  playerX: number,
+  playerY: number,
+  enemies: readonly Enemy[],
+): boolean {
+  if (dist(x, y, doorX, doorY) < SPAWN.minDistFromDoor) return false;
+  if (dist(x, y, playerX, playerY) < SPAWN.minDistFromPlayer) return false;
+  for (const e of enemies) {
+    if (dist(x, y, e.x, e.y) < SPAWN.minDistBetween) return false;
+  }
+  return true;
+}
+
 /**
  * Подбирает врагов для комнаты и расставляет их так, чтобы они не появились
  * вплотную к двери входа, к игроку или друг к другу. Число, тип и сила врагов
@@ -43,19 +60,12 @@ export function spawnEnemies(
     let x = 0;
     let y = 0;
     let ok = false;
-    for (let tries = 0; tries < 100 && !ok; tries++) {
+    for (let tries = 0; tries < SPAWN.maxPlacementTries && !ok; tries++) {
       x = OX + 2 * TILE + rng.float(0, COLS - 4) * TILE;
       y = OY + 2 * TILE + rng.float(0, ROWS - 4) * TILE;
-      ok = true;
-
-      if (dist(x, y, doorX, doorY) < SPAWN.minDistFromDoor) ok = false;
-      else if (dist(x, y, playerX, playerY) < SPAWN.minDistFromPlayer) ok = false;
-      else {
-        for (const e of enemies) {
-          if (dist(x, y, e.x, e.y) < SPAWN.minDistBetween) { ok = false; break; }
-        }
-      }
+      ok = isSpawnSpotClear(x, y, doorX, doorY, playerX, playerY, enemies);
     }
+    if (!ok) continue;
 
     enemies.push(new Enemy(x, y, type, mods));
   }

@@ -12,9 +12,9 @@ export class Rng {
   private state: number;
 
   /** Без seed — случайный старт; с seed — детерминированная цепочка. */
-  constructor(seed?: number) {
-    // 0 — валидный seed, поэтому проверяем именно на undefined.
-    this.state = (seed === undefined ? (Math.random() * 2 ** 32) >>> 0 : seed) >>> 0;
+  constructor(seed: number = autoSeed()) {
+    // 0 — валидный seed; авто-seed включается только когда аргумент не передан.
+    this.state = seed >>> 0;
   }
 
   /** Следующее число в [0, 1). Алгоритм mulberry32 — быстрый и достаточный. */
@@ -43,6 +43,7 @@ export class Rng {
 
   /** Случайный элемент массива. */
   pick<T>(arr: readonly T[]): T {
+    if (arr.length === 0) throw new Error('Rng.pick: пустой массив');
     return arr[this.int(0, arr.length - 1)];
   }
 
@@ -54,4 +55,23 @@ export class Rng {
     }
     return arr;
   }
+}
+
+const AUTO_SEED_STEP = 0x9e3779b9;
+let autoSeedCounter = 0;
+
+/**
+ * Seed для нового нефиксированного забега. Энтропия берётся только внутри Rng:
+ * остальная игровая логика по-прежнему получает все случайные числа через next().
+ */
+function autoSeed(): number {
+  autoSeedCounter = (autoSeedCounter + AUTO_SEED_STEP) >>> 0;
+  let seed = Date.now() >>> 0;
+  const crypto = globalThis.crypto;
+  if (crypto?.getRandomValues) {
+    const value = new Uint32Array(1);
+    crypto.getRandomValues(value);
+    seed ^= value[0];
+  }
+  return (seed ^ autoSeedCounter) >>> 0;
 }

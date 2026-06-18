@@ -28,6 +28,11 @@ export const OY = 80;            // отступ комнаты сверху (м
 export const FIXED_FPS = 60;
 export const FIXED_DT = 1 / FIXED_FPS; // секунд на шаг
 
+export const GAME_LOOP = {
+  maxFrameTimeSec: 0.25,  // не «отыгрывать» долгие паузы (фон/таб)
+  maxStepsPerFrame: 5,    // защита от «спирали смерти» при лагах
+};
+
 // ─────────────────────────────────────────────────────────────
 //  Типы тайлов
 // ─────────────────────────────────────────────────────────────
@@ -88,6 +93,7 @@ export const PLAYER = {
   speed: 3.2,        // px за шаг
   maxHp: 6,
   invFrames: 60,     // неуязвимость после удара, в шагах
+  entryInvFrames: 20, // короткая неуязвимость при входе в комнату, в шагах
   rangedCooldown: 10, // перезарядка выстрела, в шагах
   meleeCooldown: 22,  // перезарядка удара ближнего боя, в шагах
   transitionLock: 15, // блок повторного перехода между комнатами, в шагах
@@ -137,6 +143,7 @@ export const SPAWN = {
   minDistFromDoor: 180, // не спавнить ближе к двери входа
   minDistFromPlayer: 150,
   minDistBetween: 60,
+  maxPlacementTries: 100,
   treasureChance: 0.12, // шанс комнаты-сокровищницы
   bossChance: 0.2,      // шанс назначить комнату боссом
 };

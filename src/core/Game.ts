@@ -128,7 +128,7 @@ export class Game {
     const py = OY + d.cy * TILE + TILE / 2 - ddr * TILE;
     this.player.place(px, py);
     this.player.facing = fromDir;
-    this.player.invTimer = 20;            // короткая неуязвимость на входе
+    this.player.invTimer = PLAYER.entryInvFrames;
     this.player.transCD = PLAYER.transitionLock;
 
     this.meleeSwing = null;
