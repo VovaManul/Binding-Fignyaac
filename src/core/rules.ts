@@ -10,7 +10,7 @@
  * Геометрия (размер тайла/комнаты, геометрия дверей) остаётся в config.ts: это
  * не «правила уровня», а константы движка.
  */
-import { PLAYER, ENEMY, MIN_ROOMS, EXTRA_ROOMS, MAP_RADIUS } from '../config';
+import { PLAYER, ENEMY, MIN_ROOMS, EXTRA_ROOMS, MAP_RADIUS, FLOOR_SCALING } from '../config';
 
 export interface LevelRules {
   /** Машинный id (для сохранений/выбора). */
@@ -21,6 +21,8 @@ export interface LevelRules {
   description: string;
   /** Фиксированный seed генерации. undefined → случайный каждый забег. */
   seed?: number;
+  /** Бесконечный спуск: после босса — новый этаж с усилением, а не победа. */
+  endless?: boolean;
 
   /** Параметры генерации карты. */
   map: {
@@ -91,4 +93,38 @@ export const PRESETS: LevelRules[] = [
     player: { maxHp: PLAYER.maxHp, speed: PLAYER.speed },
     enemies: { densityMul: 1, fastChance: ENEMY.fastChance, hpMul: 1, speedMul: 1, bossHpMul: 1 },
   },
+  {
+    id: 'endless',
+    name: 'Бесконечный спуск',
+    description: 'После босса — спуск на новый этаж. Враги сильнее, комнат больше. HP и оружие сохраняются.',
+    endless: true,
+    map: { minRooms: MIN_ROOMS, extraRooms: EXTRA_ROOMS, mapRadius: MAP_RADIUS },
+    player: { maxHp: PLAYER.maxHp, speed: PLAYER.speed },
+    enemies: { densityMul: 1, fastChance: ENEMY.fastChance, hpMul: 1, speedMul: 1, bossHpMul: 1 },
+  },
 ];
+
+/**
+ * Возвращает правила для указанного этажа на основе базовых правил.
+ * С каждым этажом враги сильнее и комнат больше.
+ */
+export function scaleRulesForFloor(base: LevelRules, floor: number): LevelRules {
+  const f = floor - 1;
+  const cap = (v: number): number => Math.round(v * 100) / 100;
+  return {
+    ...base,
+    map: {
+      ...base.map,
+      minRooms: base.map.minRooms + f * FLOOR_SCALING.roomsPerFloor,
+      mapRadius: Math.min(base.map.mapRadius + Math.floor(f / 3), 6),
+    },
+    enemies: {
+      densityMul: cap(base.enemies.densityMul + f * FLOOR_SCALING.densityMulPerFloor),
+      fastChance: Math.min(base.enemies.fastChance + f * FLOOR_SCALING.fastChancePerFloor, 0.8),
+      hpMul: cap(base.enemies.hpMul + f * FLOOR_SCALING.hpMulPerFloor),
+      speedMul: cap(base.enemies.speedMul + f * FLOOR_SCALING.speedMulPerFloor),
+      bossHpMul: cap(base.enemies.bossHpMul + f * FLOOR_SCALING.bossHpMulPerFloor),
+    },
+    endless: true,
+  };
+}

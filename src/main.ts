@@ -58,8 +58,23 @@ function boot(): void {
   // Esc во время игры — вернуться к выбору уровня (по физической клавише).
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Escape' && loop) {
+      const g = (window as Window & { game?: Game }).game;
+      if (g?.inventoryOpen) {
+        g.inventoryOpen = false;
+        e.preventDefault();
+        return;
+      }
       e.preventDefault();
       toMenu();
+    }
+    // Цифры 1-9 для экипировки оружия в инвентаре.
+    const digit = parseInt(e.code.replace('Digit', ''), 10);
+    if (digit >= 1 && digit <= 9 && loop) {
+      const g = (window as Window & { game?: Game }).game;
+      if (g?.inventoryOpen) {
+        g.equipSlot(digit - 1);
+        e.preventDefault();
+      }
     }
   });
 }

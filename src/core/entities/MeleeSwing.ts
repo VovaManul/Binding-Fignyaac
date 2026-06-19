@@ -1,23 +1,27 @@
 import { MELEE, DIR } from '../../config';
 import type { Dir, Box } from '../types';
 
-/** Взмах ближнего боя: прямоугольный хитбокс перед игроком на MELEE.life шагов. */
+/** Взмах ближнего боя: прямоугольный хитбокс перед игроком на life шагов. */
 export class MeleeSwing {
   readonly dir: Dir;
   life = MELEE.life;
-  readonly damage = MELEE.damage;
-  readonly kb = MELEE.knockback;
+  readonly damage: number;
+  readonly kb: number;
   readonly box: Box;
 
-  constructor(x: number, y: number, dir: Dir) {
+  constructor(x: number, y: number, dir: Dir, overrides?: { damage?: number; knockback?: number; life?: number; sizeMul?: number }) {
     this.dir = dir;
-    const { reach: d, size: s } = MELEE;
+    this.damage = overrides?.damage ?? MELEE.damage;
+    this.kb = overrides?.knockback ?? MELEE.knockback;
+    if (overrides?.life !== undefined) this.life = overrides.life;
+    const { reach: d } = MELEE;
+    const size = MELEE.size * (overrides?.sizeMul ?? 1);
     const [dx, dy] = DIR[dir];
     this.box = {
-      x: x + (dx > 0 ? d : dx < 0 ? -d - s : -s / 2),
-      y: y + (dy > 0 ? d : dy < 0 ? -d - s : -s / 2),
-      w: s,
-      h: s,
+      x: x + (dx > 0 ? d : dx < 0 ? -d - size : -size / 2),
+      y: y + (dy > 0 ? d : dy < 0 ? -d - size : -size / 2),
+      w: size,
+      h: size,
     };
   }
 

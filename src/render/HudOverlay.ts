@@ -1,4 +1,4 @@
-import { CW, CH, OY, RH, MODE_RANGED } from '../config';
+import { CW, CH, OY, RH } from '../config';
 import type { Game } from '../core/Game';
 import type { Renderer } from './Renderer';
 
@@ -36,6 +36,11 @@ export class HudOverlay implements Renderer {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, CW, CH);
 
+    if (game.inventoryOpen) {
+      this.drawInventory(game);
+      return;
+    }
+
     this.drawHud(game);
     this.drawMinimap(game);
 
@@ -55,22 +60,21 @@ export class HudOverlay implements Renderer {
     // Здоровье: сердечки (2 HP = сердце), с фолбэком на полосу.
     const healthBottom = this.drawHealth(p.hp, p.maxHp);
 
-    // Название текущего уровня (правил).
+    // Название пресета и номер этажа (для бесконечного спуска).
     ctx.textAlign = 'left'; ctx.fillStyle = '#667'; ctx.font = '11px monospace';
-    ctx.fillText(`Уровень: ${game.rules.name}`, 20, healthBottom + 14);
+    const floorLabel = game.rules.endless ? ` | Этаж ${game.floor}` : '';
+    ctx.fillText(`${game.rules.name}${floorLabel}`, 20, healthBottom + 14);
 
-    // Индикатор режима боя.
+    // Индикатор оружия.
     const my = CH - 46;
-    const ranged = p.mode === MODE_RANGED;
-    const mText = ranged ? 'ДАЛЬНИЙ' : 'БЛИЖНИЙ';
-    const mCol = ranged ? '#4488cc' : '#cc6644';
+    const w = p.currentWeapon;
+    const wCol = w.type === 'ranged' ? '#4488cc' : '#cc6644';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#0d0d0d'; ctx.fillRect(CW / 2 - 95, my - 18, 190, 34);
-    ctx.strokeStyle = mCol; ctx.lineWidth = 2; ctx.strokeRect(CW / 2 - 95, my - 18, 190, 34);
-    ctx.fillStyle = mCol; ctx.font = 'bold 17px monospace'; ctx.fillText(`[ ${mText} ]`, CW / 2, my + 8);
+    ctx.strokeStyle = wCol; ctx.lineWidth = 2; ctx.strokeRect(CW / 2 - 95, my - 18, 190, 34);
+    ctx.fillStyle = wCol; ctx.font = 'bold 17px monospace'; ctx.fillText(`[ ${w.name} ]`, CW / 2, my + 8);
     ctx.fillStyle = '#555'; ctx.font = '11px monospace'; ctx.fillText('[Tab] сменить оружие', CW / 2, my - 26);
-    // Иконка оружия слева в рамке (если ассет есть).
-    const icon = this.img(ranged ? 'icon-ranged' : 'icon-melee');
+    const icon = this.img(w.type === 'ranged' ? 'icon-ranged' : 'icon-melee');
     if (icon) ctx.drawImage(icon, CW / 2 - 90, my - 14, 26, 26);
 
     // Счётчик врагов / подсказка зачистки.
@@ -166,5 +170,49 @@ export class HudOverlay implements Renderer {
     ctx.fillText('[R] заново', CW / 2, CH / 2 + 40);
     ctx.fillStyle = '#666'; ctx.font = '14px monospace';
     ctx.fillText('[Esc] в меню', CW / 2, CH / 2 + 68);
+  }
+
+  private drawInventory(game: import('../core/Game').Game): void {
+    const ctx = this.ctx;
+    ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(0, 0, CW, CH);
+
+    ctx.fillStyle = '#ddd'; ctx.font = 'bold 28px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('ИНВЕНТАРЬ (2 слота)', CW / 2, 50);
+
+    const p = game.player;
+    const iw = 340, ih = 56, gap = 16;
+    const total = iw * 2 + gap;
+    const ox = CW / 2 - total / 2;
+    const oy = 100;
+
+    for (let i = 0; i < 2; i++) {
+      const w = p.weapons[i];
+      const x = ox + i * (iw + gap);
+      const y = oy;
+      const selected = i === p.equipped;
+
+      ctx.fillStyle = selected ? '#1a2a1a' : '#111';
+      ctx.fillRect(x, y, iw, ih);
+      ctx.strokeStyle = selected ? '#4c4' : '#333';
+      ctx.lineWidth = selected ? 2 : 1;
+      ctx.strokeRect(x, y, iw, ih);
+
+      ctx.fillStyle = '#888'; ctx.font = '14px monospace'; ctx.textAlign = 'left';
+      ctx.fillText(`[${i + 1}]`, x + 12, y + 34);
+
+      ctx.fillStyle = selected ? '#4c4' : '#ccc'; ctx.font = 'bold 16px monospace';
+      ctx.fillText(w.name, x + 48, y + 34);
+
+      ctx.fillStyle = '#666'; ctx.font = '12px monospace';
+      ctx.textAlign = 'right';
+      const t = w.type === 'ranged' ? 'ДАЛЬНИЙ' : 'БЛИЖНИЙ';
+      ctx.fillText(`${t}  DMG:${w.damage}  CD:${w.cooldown}`, x + iw - 12, y + 34);
+
+      const icon = this.img(w.type === 'ranged' ? 'icon-ranged' : 'icon-melee');
+      if (icon) ctx.drawImage(icon, x + iw - 44, y + 16, 24, 24);
+    }
+
+    ctx.fillStyle = '#555'; ctx.font = '13px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('[E] закрыть  |  [1] [2] слот  |  [Tab] переключить', CW / 2, CH - 30);
   }
 }

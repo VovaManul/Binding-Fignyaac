@@ -1,9 +1,11 @@
 import { OX, OY, TILE, COLS, ROWS, DOOR, SPAWN } from '../../config';
 import { Enemy } from '../entities/Enemy';
+import { Chest } from '../entities/Chest';
 import { dist } from '../util';
 import type { Room } from '../world/Room';
 import type { Dir, EnemyType } from '../types';
 import type { Rng } from '../rng';
+import type { WeaponId } from '../weapons';
 import { DEFAULT_RULES, type LevelRules } from '../rules';
 
 function isSpawnSpotClear(
@@ -29,6 +31,17 @@ function isSpawnSpotClear(
  * берутся из правил уровня (rules). Возвращает массив — вызывающий код кладёт
  * его в room.enemies.
  */
+function pickEnemyType(room: Room, rng: Rng, fastChance: number): EnemyType {
+  if (room.type === 'boss') return 'boss';
+  const roll = rng.next();
+  // normal: до 0.4, fast: 0.4-0.6, charger: 0.6-0.75, tank: 0.75-0.88, shooter: 0.88-1.0
+  if (roll < 0.4) return 'normal';
+  if (roll < 0.4 + fastChance * 0.7) return 'fast';
+  if (roll < 0.7) return 'charger';
+  if (roll < 0.85) return 'tank';
+  return 'shooter';
+}
+
 export function spawnEnemies(
   room: Room,
   entryDir: Dir,
@@ -50,8 +63,7 @@ export function spawnEnemies(
   const doorY = OY + door.cy * TILE + TILE / 2;
 
   for (let i = 0; i < count; i++) {
-    const type: EnemyType =
-      room.type === 'boss' ? 'boss' : rng.chance(er.fastChance) ? 'fast' : 'normal';
+    const type: EnemyType = pickEnemyType(room, rng, er.fastChance);
     const mods = {
       hpMul: er.hpMul * (type === 'boss' ? er.bossHpMul : 1),
       speedMul: er.speedMul,
@@ -71,4 +83,16 @@ export function spawnEnemies(
   }
 
   return enemies;
+}
+
+const TREASURE_WEAPONS: WeaponId[] = ['shotgun', 'axe', 'staff', 'whip', 'bomb', 'boomerang', 'laser'];
+
+export function spawnChest(room: Room, rng: Rng): Chest {
+  const cx = OX + (COLS / 2) * TILE;
+  const cy = OY + (ROWS / 2) * TILE;
+  return new Chest(cx, cy);
+}
+
+export function pickChestWeapon(rng: Rng): WeaponId {
+  return rng.pick(TREASURE_WEAPONS);
 }

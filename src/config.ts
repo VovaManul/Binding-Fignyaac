@@ -124,6 +124,9 @@ export const ENEMY_STATS = {
   normal: { size: 32, hp: 3, speed: 1.15, damage: 1 },
   fast: { size: 26, hp: 2, speed: 1.9, damage: 1 },
   boss: { size: 46, hp: 10, speed: 0.9, damage: 2 },
+  charger: { size: 32, hp: 5, speed: 1.6, damage: 1 },
+  tank: { size: 44, hp: 10, speed: 0.6, damage: 2 },
+  shooter: { size: 28, hp: 3, speed: 1.0, damage: 1 },
 } as const;
 
 export const ENEMY = {
@@ -146,4 +149,24 @@ export const SPAWN = {
   maxPlacementTries: 100,
   treasureChance: 0.12, // шанс комнаты-сокровищницы
   bossChance: 0.2,      // шанс назначить комнату боссом
+};
+
+// ─────────────────────────────────────────────────────────────
+//  Сундук (сокровищница)
+// ─────────────────────────────────────────────────────────────
+export const CHEST = {
+  size: 40,
+  hp: 5,
+};
+
+// ─────────────────────────────────────────────────────────────
+//  Масштабирование этажей (New Game+)
+// ─────────────────────────────────────────────────────────────
+export const FLOOR_SCALING = {
+  roomsPerFloor: 2,           // + комнат на этаж
+  hpMulPerFloor: 0.15,        // + множитель HP врагов на этаж
+  speedMulPerFloor: 0.05,     // + множитель скорости на этаж
+  densityMulPerFloor: 0.1,    // + множитель плотности на этаж
+  bossHpMulPerFloor: 0.2,     // + множитель HP босса на этаж
+  fastChancePerFloor: 0.03,   // + доля быстрых врагов на этаж
 };
