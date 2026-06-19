@@ -1,6 +1,30 @@
-import { PLAYER, MODE_RANGED } from '../../config';
+import { PLAYER, MODE_RANGED, MODE_MELEE } from '../../config';
 import { WEAPONS, type WeaponId, type WeaponDef } from '../weapons';
 import type { CombatMode, Box, Dir } from '../types';
+
+/**
+ * Статы-множители, которые модифицируют базовые характеристики оружия.
+ * Все начинают с 1 (нейтрально); пассивные предметы и баффы их меняют.
+ * Сделано мультипликативно поверх WeaponDef, чтобы предметы и оружие
+ * комбинировались независимо (как в Isaac: апгрейды работают с любым оружием).
+ */
+export interface PlayerStats {
+  /** Множитель урона выстрела/взмаха. */
+  damageMul: number;
+  /** Множитель скорости атаки (больше → чаще стреляет).Cooldown = base / fireRateMul. */
+  fireRateMul: number;
+  /** Множитель дальности полёта снаряда (в шагах жизни). */
+  rangeMul: number;
+  /** Множитель скорости полёта снаряда. */
+  shotSpeedMul: number;
+}
+
+export const NEUTRAL_STATS: PlayerStats = {
+  damageMul: 1,
+  fireRateMul: 1,
+  rangeMul: 1,
+  shotSpeedMul: 1,
+};
 
 /**
  * Игрок. Только данные и геометрия — никакой отрисовки.
@@ -29,6 +53,9 @@ export class Player {
   /** 0 или 1 — какой слот сейчас экипирован. */
   equipped: 0 | 1 = 0;
 
+  /** Текущие множители. Меняются предметами/баффами. */
+  stats: PlayerStats = { ...NEUTRAL_STATS };
+
   /** Переопределения из правил уровня; по умолчанию — баланс из config. */
   constructor(rules: { maxHp?: number; speed?: number } = {}) {
     this.maxHp = rules.maxHp ?? PLAYER.maxHp;
@@ -45,10 +72,31 @@ export class Player {
     return this.weapons[this.equipped];
   }
 
+  /** Эффективный урон оружия с учётом статов игрока. */
+  effectiveDamage(w: WeaponDef): number {
+    return w.damage * this.stats.damageMul;
+  }
+
+  /** Эффективная перезарядка оружия с учётом скорости атаки. */
+  effectiveCooldown(w: WeaponDef): number {
+    return Math.max(1, Math.round(w.cooldown / this.stats.fireRateMul));
+  }
+
   /** Подобрать оружие — заменяет текущий экипированный слот. */
   addWeapon(id: WeaponId): void {
     this.weapons[this.equipped] = WEAPONS[id];
-    this.mode = WEAPONS[id].type === 'ranged' ? MODE_RANGED : 1;
+    this.mode = WEAPONS[id].type === 'ranged' ? MODE_RANGED : MODE_MELEE;
+  }
+
+  /**
+   * Увеличить максимальное HP на bonus и подлечить на ту же величину.
+   * maxHp readonly снаружи, поэтому меняем через этот метод — он же не
+   * позволяет уйти в отрицательные значения.
+   */
+  growMaxHp(bonus: number): void {
+    if (bonus <= 0) return;
+    (this as { maxHp: number }).maxHp += bonus;
+    this.hp = Math.min(this.maxHp, this.hp + bonus);
   }
 
   /** Поставить позицию мгновенно, сбросив интерполяцию (телепорт). */

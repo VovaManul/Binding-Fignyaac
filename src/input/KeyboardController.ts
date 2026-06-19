@@ -1,5 +1,4 @@
 import type { InputSource, InputState } from './InputState';
-import type { Dir } from '../core/types';
 
 /**
  * Раскладка: WASD — движение, стрелки — прицельная стрельба, пробел —
@@ -74,16 +73,20 @@ export class KeyboardController implements InputSource {
     if (down('KeyA')) moveX -= 1;
     if (down('KeyD')) moveX += 1;
 
-    let aimDir: Dir | null = null;
-    if (down('ArrowUp')) aimDir = 'up';
-    else if (down('ArrowDown')) aimDir = 'down';
-    else if (down('ArrowLeft')) aimDir = 'left';
-    else if (down('ArrowRight')) aimDir = 'right';
+    // Прицел собираем из стрелок как ВЕКТОР — поддерживает 8 направлений
+    // (одновременные ArrowUp + ArrowRight дают диагональ {0,-1}+{1,0}).
+    let aimX = 0;
+    let aimY = 0;
+    if (down('ArrowUp')) aimY -= 1;
+    if (down('ArrowDown')) aimY += 1;
+    if (down('ArrowLeft')) aimX -= 1;
+    if (down('ArrowRight')) aimX += 1;
+    const aimVec = (aimX !== 0 || aimY !== 0) ? { x: aimX, y: aimY } : null;
 
     const snapshot: InputState = {
       moveX,
       moveY,
-      aimDir,
+      aimVec,
       attackHeld: down('Space'),
       toggleWeapon: this.toggleWeaponEdge,
       restart: this.restartEdge,

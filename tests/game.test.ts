@@ -39,7 +39,7 @@ describe('Game', () => {
 
   it('стрельба создаёт снаряд, который потом исчезает', () => {
     const game = new Game(DEFAULT_RULES, new Rng(4));
-    game.step(input({ aimDir: 'right' }));
+    game.step(input({ aimVec: { x: 1, y: 0 } }));
     expect(game.curRoom.tears.length).toBe(1);
     // Снаряд летит вправо и со временем гаснет (стена/время жизни).
     for (let i = 0; i < 200; i++) game.step(input());
@@ -158,7 +158,7 @@ describe('Game', () => {
     const game = new Game(DEFAULT_RULES, new Rng(12));
     game.player.addWeapon('boomerang');
 
-    game.step(input({ aimDir: 'right' }));
+    game.step(input({ aimVec: { x: 1, y: 0 } }));
 
     expect(game.curRoom.tears[0].type).toBe('boomerang');
     expect(game.curRoom.tears[0].damage).toBe(2);
@@ -171,7 +171,7 @@ describe('Game', () => {
     const enemy = new Enemy(game.player.x + 7, game.player.y, 'tank');
     game.curRoom.enemies = [enemy];
 
-    game.step(input({ aimDir: 'right' }));
+    game.step(input({ aimVec: { x: 1, y: 0 } }));
     expect(enemy.burnTimer).toBeGreaterThan(0);
 
     const hpAfterHit = enemy.hp;
