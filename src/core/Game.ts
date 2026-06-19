@@ -1,5 +1,5 @@
 import {
-  DIR, DOOR, OX, OY, TILE, COLS, ROWS, T_WALL,
+  DIR, DOOR, OX, OY, TILE, COLS, ROWS,
   MODE_RANGED, MODE_MELEE, PLAYER, ENEMY, MELEE, PROJECTILE,
 } from '../config';
 import type { Dir } from './types';
@@ -12,12 +12,17 @@ import { MeleeSwing } from './entities/MeleeSwing';
 import { RoomMap } from './world/RoomMap';
 import type { Room } from './world/Room';
 import { collidesWall } from './systems/collision';
+import { moveEntity } from './systems/movement';
+import { runAI, spawnSplitterChildren, type AIContext } from './systems/ai';
+import {
+  applyWeaponProjectileStats, explodeBomb, projectileHitWall,
+} from './systems/projectiles';
 import { spawnEnemies, spawnChest, pickChestWeapon } from './systems/spawner';
-import { WeaponPickup } from './entities/WeaponPickup';
-import type { WeaponDef } from './weapons';
+import { Pickup } from './entities/Pickup';
+import { ITEMS, applyItem, ALL_ITEM_IDS, type ItemId } from './items';
 import { DEFAULT_RULES, scaleRulesForFloor, type LevelRules } from './rules';
 import type { InputState } from '../input/InputState';
-import { pressingDir } from '../input/InputState';
+import { pressingDir, cardinalFromVec } from '../input/InputState';
 
 /**
  * Game — «мозг» игры. Полностью независим от рендера и DOM: ничего не
@@ -81,10 +86,10 @@ export class Game {
     }
   }
 
-  /** Выбрать слот 0 или 1 (из main.ts при открытом инвентаре). */
+  /** Выбрать слот (из main.ts при открытом инвентаре). Молча игнорирует несуществующие. */
   equipSlot(slot: number): void {
-    if (slot !== 0 && slot !== 1) return;
-    this.player.equipped = slot;
+    if (slot < 0 || slot >= this.player.weapons.length) return;
+    this.player.equipped = slot as 0 | 1;
     this.player.mode = this.player.currentWeapon.type === 'ranged' ? MODE_RANGED : MODE_MELEE;
     this.inventoryOpen = false;
   }
@@ -122,8 +127,11 @@ export class Game {
     const aliveCount = this.updateEnemies(room, p);
     if (this.gameOver) return;
 
-    // Комната зачищена: открываем двери.
-    if (room.enemies.length > 0 && aliveCount === 0 && !room.cleared) {
+    // Комната зачищена: все враги мертвы (aliveCount === 0 после фильтра
+    // означает, что ни живых, ни свежеспавненных не осталось). Проверку
+    // через room.enemies.length использовать нельзя — после фильтрации длина
+    // уже 0; считаем по живым из updateEnemies.
+    if (aliveCount === 0 && !room.cleared && room.type !== 'spawn' && room.type !== 'treasure' && room.type !== 'secret') {
       room.cleared = true;
       room.rebuildTiles();
     }
@@ -156,6 +164,7 @@ export class Game {
   /** Расставляет игрока внутри текущей комнаты у двери fromDir и (при нужде) спавнит врагов. */
   enterRoom(fromDir: Dir): void {
     const room = this.curRoom;
+    const wasVisited = room.visited; // ловим «первый вход» до установки флага
     room.visited = true;
 
     const d = DOOR[fromDir];
@@ -177,8 +186,12 @@ export class Game {
       if (room.type === 'treasure' && !room.chest) {
         room.chest = spawnChest(room, this.rng);
       }
-      // Если врагов нет (напр. сокровищница) — зачищать нечего, открываем сразу,
-      // иначе двери никогда не появятся и игрок застрянет.
+      // Секретка: +1 max HP один раз при первом входе (лечит заодно на 1).
+      if (room.type === 'secret' && !wasVisited) {
+        this.player.growMaxHp(1);
+      }
+      // Если врагов нет (напр. сокровищница/секретка) — зачищать нечего,
+      // открываем сразу, иначе двери никогда не появятся и игрок застрянет.
       if (room.enemies.length === 0) room.cleared = true;
       room.rebuildTiles();
     } else {
@@ -204,39 +217,45 @@ export class Game {
     if (input.moveX < 0) p.moveDir = 'left';
     else if (input.moveX > 0) p.moveDir = 'right';
 
-    const dx = mx * p.speed;
-    const dy = my * p.speed;
-    // Раздельное разрешение коллизий по осям: позволяет «скользить» вдоль стен.
-    p.x += dx;
-    if (collidesWall(p.box, room)) p.x -= dx;
-    p.y += dy;
-    if (collidesWall(p.box, room)) p.y -= dy;
+    moveEntity(p, mx * p.speed, my * p.speed, room);
   }
 
   private handleAttack(input: InputState, room: Room, p: Player): void {
-    let dir: Dir | null = null;
-    if (input.aimDir) dir = input.aimDir;
-    else if (input.attackHeld) dir = p.moveDir;
+    // Приоритет: явный прицел (вектор стрелок) → иначе направление движения.
+    let nx = 0, ny = 0;
+    let aim = false;
+    if (input.aimVec) {
+      nx = input.aimVec.x;
+      ny = input.aimVec.y;
+      aim = true;
+    } else if (input.attackHeld) {
+      [nx, ny] = DIR[p.moveDir];
+      aim = true;
+    }
 
-    if (!dir || p.atkCD > 0) return;
+    if (!aim || p.atkCD > 0) return;
 
-    p.facing = dir;
+    const len = Math.hypot(nx, ny) || 1;
+    nx /= len; ny /= len;
+    // Для рендера и door-логики сохраняем facing как одно из 4 направлений.
+    p.facing = cardinalFromVec({ x: nx, y: ny });
+
     const w = p.currentWeapon;
-    p.atkCD = w.cooldown;
-    const [nx, ny] = DIR[dir];
+    p.atkCD = p.effectiveCooldown(w);
+    const damage = p.effectiveDamage(w);
 
     if (w.type === 'ranged') {
       if (w.projectileType === 'beam') {
         // Лазерный луч — стационарная зона поражения.
-        const range = 70;
+        const range = w.beamRange ?? 70;
         const t = new Projectile(p.x + nx * range, p.y + ny * range, 0, 0, 'beam');
         t.speed = 0;
         t.life = w.beamLife ?? 10;
-        t.damage = w.beamTickDmg ?? 2;
+        t.damage = (w.beamTickDmg ?? 2) * p.stats.damageMul;
         t.beamRadius = w.beamRadius ?? 44;
         room.tears.push(t);
       } else if (w.spreadCount && w.spreadCount > 1) {
-        const spread = 0.15;
+        const spread = w.spread ?? 0.15;
         const perpX = -ny;
         const perpY = nx;
         const projectileType = w.projectileType ?? 'tear';
@@ -244,19 +263,19 @@ export class Game {
           const off = (i - (w.spreadCount - 1) / 2) * spread;
           const sx = nx + perpX * off;
           const sy = ny + perpY * off;
-          const len = Math.hypot(sx, sy) || 1;
-          const t = new Projectile(p.x, p.y, sx / len, sy / len, projectileType);
-          this.applyWeaponProjectileStats(t, w);
+          const sl = Math.hypot(sx, sy) || 1;
+          const t = new Projectile(p.x, p.y, sx / sl, sy / sl, projectileType);
+          applyWeaponProjectileStats(t, w, p);
           room.tears.push(t);
         }
       } else {
         const t = new Projectile(p.x, p.y, nx, ny, w.projectileType ?? 'tear');
-        this.applyWeaponProjectileStats(t, w);
+        applyWeaponProjectileStats(t, w, p);
         room.tears.push(t);
       }
     } else {
-      this.meleeSwing = new MeleeSwing(p.x, p.y, dir, {
-        damage: w.damage,
+      this.meleeSwing = new MeleeSwing(p.x, p.y, cardinalFromVec({ x: nx, y: ny }), {
+        damage,
         knockback: w.knockback,
         life: w.swingLife,
         sizeMul: w.swingSizeMul,
@@ -283,15 +302,6 @@ export class Game {
     if (room.chest?.alive && overlap(room.chest.box, this.meleeSwing.box)) {
       room.chest.hp -= this.meleeSwing.damage;
     }
-  }
-
-  /** Снаряд запоминает свойства оружия при выстреле, а не при попадании. */
-  private applyWeaponProjectileStats(t: Projectile, w: WeaponDef): void {
-    t.damage = w.damage;
-    t.burnDamage = w.fireDmg ?? 1;
-    t.burnInterval = w.fireInterval ?? 10;
-    t.burnDuration = w.fireDuration ?? 0;
-    t.explosionRadius = w.explosionRadius ?? 0;
   }
 
   private updateTears(room: Room): void {
@@ -325,15 +335,8 @@ export class Game {
       t.y += t.dy * t.speed;
       t.life--;
 
-      const col = Math.floor((t.x - OX) / TILE);
-      const row = Math.floor((t.y - OY) / TILE);
-      if (col < 0 || col >= COLS || row < 0 || row >= ROWS || t.life <= 0) {
-        this.explodeBomb(room, t);
-        t.life = 0;
-        continue;
-      }
-      if (room.tiles[row][col] === T_WALL) {
-        this.explodeBomb(room, t);
+      if (t.life <= 0 || projectileHitWall(t, room)) {
+        explodeBomb(room, t);
         t.life = 0;
         continue;
       }
@@ -362,7 +365,7 @@ export class Game {
             }
             if (t.type !== 'laser') {
               t.life = 0;
-              this.explodeBomb(room, t);
+              explodeBomb(room, t);
               break;
             }
           }
@@ -372,7 +375,7 @@ export class Game {
           room.chest.hp -= t.damage;
           if (t.type !== 'laser') {
             t.life = 0;
-            this.explodeBomb(room, t);
+            explodeBomb(room, t);
           }
         }
       }
@@ -380,39 +383,32 @@ export class Game {
     room.tears = room.tears.filter((t) => t.alive);
   }
 
-  /** Взрыв бомбы: AoE-урон по врагам. */
-  private explodeBomb(room: Room, t: Projectile): void {
-    if (t.type !== 'bomb') return;
-    const radius = t.explosionRadius || 60;
-    for (const e of room.enemies) {
-      if (!e.alive) continue;
-      if (dist(t.x, t.y, e.x, e.y) < radius) {
-        e.hp -= 3;
-        e.hitTimer = ENEMY.hitFlash;
-        // Отбрасывание от центра взрыва.
-        const dx = e.x - t.x;
-        const dy = e.y - t.y;
-        const d = Math.hypot(dx, dy) || 1;
-        e.knx = (dx / d) * 12;
-        e.kny = (dy / d) * 12;
-      }
-    }
-  }
-
-  /** Сундук уничтожен — спавним оружие. */
+  /** Сундук уничтожен — спавним предмет или оружие (50/50). */
   private updateChest(room: Room): void {
     if (!room.chest || room.pickup) return;
     if (room.chest.alive) return;
-    const weaponId = pickChestWeapon(this.rng);
-    room.pickup = new WeaponPickup(room.chest.x, room.chest.y, weaponId);
+    const dropWeapon = this.rng.chance(0.5);
+    if (dropWeapon) {
+      room.pickup = Pickup.weapon(room.chest.x, room.chest.y, pickChestWeapon(this.rng));
+    } else {
+      const itemId = this.rng.pick(ALL_ITEM_IDS);
+      room.pickup = Pickup.item(room.chest.x, room.chest.y, itemId);
+    }
     room.chest = null;
   }
 
-  /** Подбор оружия игроком. */
+  /** Подбор пикапа игроком (оружие → слот, предмет → статы). */
   private updatePickup(room: Room, p: Player): void {
     if (!room.pickup) return;
     if (overlap(p.box, room.pickup.box)) {
-      p.addWeapon(room.pickup.weaponId);
+      const pk = room.pickup;
+      if (pk.kind === 'weapon' && pk.weaponId !== undefined) {
+        p.addWeapon(pk.weaponId);
+      } else if (pk.kind === 'item' && pk.itemId !== undefined) {
+        const item: ItemId = pk.itemId;
+        const def = ITEMS[item];
+        applyItem(p.stats, def, (hpBonus) => p.growMaxHp(hpBonus));
+      }
       room.pickup = null;
     }
   }
@@ -420,9 +416,20 @@ export class Game {
   private updateEnemies(room: Room, p: Player): number {
     let aliveCount = 0;
     const newEnemies: Enemy[] = [];
+    const ctx: AIContext = {
+      room, player: p, rng: this.rng, floor: this.floor, floorRules: this.floorRules, newEnemies,
+    };
+
+    // Запоминаем splitter'ов, которые умерли в этом шаге — после цикла спавним
+    // их детей. (Делаем это в конце, чтобы не мутировать массив во время итерации.)
+    const deadSplitters: Enemy[] = [];
 
     for (const e of room.enemies) {
-      if (!e.alive) continue;
+      // Мёртвый враг: ловим splitter для распада, иначе пропускаем.
+      if (!e.alive) {
+        if (e.type === 'splitter') deadSplitters.push(e);
+        continue;
+      }
 
       if (e.hitTimer > 0) e.hitTimer--;
 
@@ -434,8 +441,11 @@ export class Game {
           e.hitTimer = ENEMY.hitFlash;
         }
       }
-      if (!e.alive) continue;
-      aliveCount++;
+      if (!e.alive) {
+        // Умер от горения/прошлого удара в этом шаге.
+        if (e.type === 'splitter') deadSplitters.push(e);
+        continue;
+      }
 
       // Фаза отбрасывания: летит по инерции, ИИ не работает.
       if (Math.abs(e.knx) > 0.1 || Math.abs(e.kny) > 0.1) {
@@ -445,20 +455,21 @@ export class Game {
         if (collidesWall(e.box, room)) e.y -= e.kny * 3;
         e.knx *= ENEMY.knockbackDecay;
         e.kny *= ENEMY.knockbackDecay;
+        aliveCount++;
+        if (e.atkTimer > 0) e.atkTimer--;
         continue;
       }
       e.knx = 0;
       e.kny = 0;
 
-      if (e.type === 'boss' && this.milestoneBossFloor(this.floor)) {
-        this.updateMilestoneBoss(e, room, p, newEnemies);
-      } else if (e.type === 'shooter') {
-        this.updateShooter(e, room, p);
-      } else if (e.type === 'charger') {
-        this.updateCharger(e, room, p);
-      } else {
-        this.updateChaser(e, room, p);
-      }
+      aliveCount++;
+
+      runAI(e, ctx);
+
+      // Если за этот шаг враг умер от ИИ-фазы или снаряда (маловероятно,
+      // но возможно при касании уже летящего), отслеживаем.
+      if (!e.alive && e.type === 'splitter') deadSplitters.push(e);
+      if (!e.alive) continue;
 
       // Контактный урон по игроку.
       if (e.atkTimer > 0) e.atkTimer--;
@@ -469,154 +480,23 @@ export class Game {
         if (p.hp <= 0) {
           p.hp = 0;
           this.gameOver = true;
+          for (const parent of deadSplitters) newEnemies.push(...spawnSplitterChildren(parent));
+          room.enemies.push(...newEnemies);
+          room.enemies = room.enemies.filter((en) => en.alive);
           return aliveCount;
         }
       }
     }
 
+    // Распад splitter'ов на двух fast.
+    for (const parent of deadSplitters) {
+      newEnemies.push(...spawnSplitterChildren(parent));
+    }
+
     room.enemies.push(...newEnemies);
+    // Убираем мёртвых — иначе массив растёт и зашумляет итерации/рендер.
+    room.enemies = room.enemies.filter((en) => en.alive);
     return aliveCount;
-  }
-
-  /** Этаж кратный 5, начиная с 5. */
-  private milestoneBossFloor(floor: number): boolean {
-    return floor % 5 === 0 && floor >= 5;
-  }
-
-  /** Босс на milestone-этаже: фазы, стрельба, миньоны. */
-  private updateMilestoneBoss(e: Enemy, room: Room, p: Player, newEnemies: Enemy[]): void {
-    const maxPhase = this.floor <= 5 ? 2 : 3;
-    const hpRatio = e.hp / e.maxHp;
-
-    let targetPhase = 1;
-    if (maxPhase >= 2 && hpRatio < 0.66) targetPhase = 2;
-    if (maxPhase >= 3 && hpRatio < 0.33) targetPhase = 3;
-
-    if (targetPhase > e.phase) {
-      e.phase = targetPhase;
-      e.phaseChanged = true;
-      e.hitTimer = 15; // визуальная вспышка (для рендера)
-    }
-
-    const phaseSpeedMul = targetPhase >= 3 ? 1.8 : targetPhase === 2 ? 1.35 : 1.0;
-    const effectiveSpeed = e.speed * phaseSpeedMul;
-
-    // Движение к игроку.
-    const dx = p.x - e.x;
-    const dy = p.y - e.y;
-    const d = Math.hypot(dx, dy);
-    if (d > 0 && d < ENEMY.aggroRange) {
-      const mx = (dx / d) * effectiveSpeed;
-      const my = (dy / d) * effectiveSpeed;
-      e.x += mx;
-      if (collidesWall(e.box, room)) e.x -= mx;
-      e.y += my;
-      if (collidesWall(e.box, room)) e.y -= my;
-    }
-
-    // Стрельба снарядами (фаза 2+).
-    if (targetPhase >= 2) {
-      if (e.shootTimer > 0) e.shootTimer--;
-      const shootCD = targetPhase >= 3 ? 25 : 40;
-      if (e.shootTimer <= 0 && d < 400 && d > 50) {
-        e.shootTimer = shootCD;
-        const nd = d || 1;
-        const t = new Projectile(e.x, e.y, dx / nd, dy / nd, 'tear');
-        t.hostile = true;
-        t.damage = 1 + Math.floor(this.floor / 5);
-        t.speed = 3;
-        t.life = 60;
-        room.tears.push(t);
-      }
-    }
-
-    // Спавн миньонов (фаза 3).
-    if (targetPhase >= 3) {
-      if (e.spawnTimer > 0) e.spawnTimer--;
-      if (e.spawnTimer <= 0) {
-        e.spawnTimer = 120;
-        const rng = this.rng;
-        const mx = OX + 2 * TILE + rng.float(0, COLS - 4) * TILE;
-        const my = OY + 2 * TILE + rng.float(0, ROWS - 4) * TILE;
-        const er = this.floorRules.enemies;
-        newEnemies.push(new Enemy(mx, my, 'fast', { hpMul: er.hpMul * 1.5, speedMul: er.speedMul * 1.2 }));
-      }
-    }
-  }
-
-  /** Стандартное преследование (normal, fast, tank, boss). */
-  private updateChaser(e: Enemy, room: Room, p: Player): void {
-    const dx = p.x - e.x;
-    const dy = p.y - e.y;
-    const d = Math.hypot(dx, dy);
-    if (d > 0 && d < ENEMY.aggroRange) {
-      const mx = (dx / d) * e.speed;
-      const my = (dy / d) * e.speed;
-      e.x += mx;
-      if (collidesWall(e.box, room)) e.x -= mx;
-      e.y += my;
-      if (collidesWall(e.box, room)) e.y -= my;
-    }
-  }
-
-  /** Зарядчик: бежит прямо на игрока с удвоенной скоростью. */
-  private updateCharger(e: Enemy, room: Room, p: Player): void {
-    if (e.chargeTimer > 0) e.chargeTimer--;
-    const dx = p.x - e.x;
-    const dy = p.y - e.y;
-    const d = Math.hypot(dx, dy);
-    if (d > 0 && d < ENEMY.aggroRange) {
-      const speedMul = e.chargeTimer <= 0 && d < 150 ? 2.5 : 1.0;
-      if (speedMul > 1) e.chargeTimer = 40; // перезарядка рывка
-      const mx = (dx / d) * e.speed * speedMul;
-      const my = (dy / d) * e.speed * speedMul;
-      e.x += mx;
-      if (collidesWall(e.box, room)) e.x -= mx;
-      e.y += my;
-      if (collidesWall(e.box, room)) e.y -= my;
-    }
-  }
-
-  /** Стрелок: держит дистанцию, стреляет снарядами. */
-  private updateShooter(e: Enemy, room: Room, p: Player): void {
-    const dx = p.x - e.x;
-    const dy = p.y - e.y;
-    const d = Math.hypot(dx, dy);
-
-    // Держит дистанцию ~200 px.
-    if (d > 0 && d < ENEMY.aggroRange) {
-      if (d < 150) {
-        // Слишком близко — отступает.
-        const mx = -(dx / d) * e.speed;
-        const my = -(dy / d) * e.speed;
-        e.x += mx;
-        if (collidesWall(e.box, room)) e.x -= mx;
-        e.y += my;
-        if (collidesWall(e.box, room)) e.y -= my;
-      } else {
-        const mx = (dx / d) * e.speed * 0.5;
-        const my = (dy / d) * e.speed * 0.5;
-        e.x += mx;
-        if (collidesWall(e.box, room)) e.x -= mx;
-        e.y += my;
-        if (collidesWall(e.box, room)) e.y -= my;
-      }
-    }
-
-    // Стрельба.
-    if (e.shootTimer > 0) e.shootTimer--;
-    if (e.shootTimer <= 0 && d < 350 && d > 40) {
-      e.shootTimer = 45;
-      const nd = d || 1;
-      const nx = dx / nd;
-      const ny = dy / nd;
-      const t = new Projectile(e.x, e.y, nx, ny, 'tear');
-      t.hostile = true;
-      t.damage = 1;
-      t.speed = 3.5;
-      t.life = 60;
-      room.tears.push(t);
-    }
   }
 
   // ── Переходы и победа ─────────────────────────────────────

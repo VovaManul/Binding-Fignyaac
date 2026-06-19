@@ -67,6 +67,19 @@ export class HudOverlay implements Renderer {
     const floorLabel = game.rules.endless ? ` | Этаж ${game.floor}` : '';
     ctx.fillText(`${game.rules.name}${floorLabel}`, 20, healthBottom + 14);
 
+    // Активные множители стат игрока (от предметов). Показываем только
+    // отличные от нейтральных — чтобы не засорять UI в начале забега.
+    const s = p.stats;
+    const bits: string[] = [];
+    if (s.damageMul !== 1) bits.push(`DMG ×${s.damageMul.toFixed(2)}`);
+    if (s.fireRateMul !== 1) bits.push(`RATE ×${s.fireRateMul.toFixed(2)}`);
+    if (s.rangeMul !== 1) bits.push(`RNG ×${s.rangeMul.toFixed(2)}`);
+    if (s.shotSpeedMul !== 1) bits.push(`SPD ×${s.shotSpeedMul.toFixed(2)}`);
+    if (bits.length) {
+      ctx.fillStyle = '#9a7'; ctx.font = '10px monospace';
+      ctx.fillText(bits.join('  '), 20, healthBottom + 28);
+    }
+
     // Индикатор оружия.
     const my = CH - 46;
     const w = p.currentWeapon;
@@ -92,7 +105,7 @@ export class HudOverlay implements Renderer {
 
     // Подпись типа комнаты.
     if (room.visited) {
-      const label = { spawn: 'СТАРТ', normal: '', treasure: 'СОКРОВИЩЕ', boss: 'БОСС' }[room.type];
+      const label = { spawn: 'СТАРТ', normal: '', treasure: 'СОКРОВИЩЕ', boss: 'БОСС', secret: 'СЕКРЕТ' }[room.type];
       if (label) {
         ctx.textAlign = 'right'; ctx.fillStyle = '#555'; ctx.font = '11px monospace';
         ctx.fillText(label, CW - 20, OY + RH + 30);
@@ -145,7 +158,7 @@ export class HudOverlay implements Renderer {
 
         let color = '#141414';
         if (room.visited) {
-          color = { spawn: '#2a5a2a', boss: '#5a1a1a', treasure: '#5a5a1a', normal: '#555' }[room.type];
+          color = { spawn: '#2a5a2a', boss: '#5a1a1a', treasure: '#5a5a1a', secret: '#1a3a5a', normal: '#555' }[room.type];
         }
         ctx.fillStyle = color; ctx.fillRect(x, y, cell, cell);
 

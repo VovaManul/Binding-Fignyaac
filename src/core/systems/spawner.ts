@@ -34,12 +34,13 @@ function isSpawnSpotClear(
 function pickEnemyType(room: Room, rng: Rng, fastChance: number): EnemyType {
   if (room.type === 'boss') return 'boss';
   const roll = rng.next();
-  // normal: до 0.4, fast: 0.4-0.6, charger: 0.6-0.75, tank: 0.75-0.88, shooter: 0.88-1.0
+  // normal: до 0.4, fast: 0.4-0.6, charger: 0.6-0.75, tank: 0.75-0.88, shooter: 0.88-0.95, splitter: 0.95-1.0
   if (roll < 0.4) return 'normal';
   if (roll < 0.4 + fastChance * 0.7) return 'fast';
   if (roll < 0.7) return 'charger';
   if (roll < 0.85) return 'tank';
-  return 'shooter';
+  if (roll < 0.95) return 'shooter';
+  return 'splitter';
 }
 
 export function spawnEnemies(
@@ -55,7 +56,7 @@ export function spawnEnemies(
 
   const count =
     room.type === 'boss' ? 1 :
-    room.type === 'treasure' ? 0 :
+    room.type === 'treasure' || room.type === 'secret' ? 0 :
     Math.max(1, Math.round((SPAWN.normalMin + rng.int(0, SPAWN.normalExtra)) * er.densityMul));
 
   const door = DOOR[entryDir];

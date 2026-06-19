@@ -76,6 +76,8 @@ export class RoomMap {
           type = 'boss';
         } else if (rng.chance(SPAWN.treasureChance) && count >= 2) {
           type = 'treasure';
+        } else if (rng.chance(SPAWN.secretChance) && count >= 3) {
+          type = 'secret';
         }
 
         this.add(nc, nr, type);

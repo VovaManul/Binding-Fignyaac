@@ -127,6 +127,7 @@ export const ENEMY_STATS = {
   charger: { size: 32, hp: 5, speed: 1.6, damage: 1 },
   tank: { size: 44, hp: 10, speed: 0.6, damage: 2 },
   shooter: { size: 28, hp: 3, speed: 1.0, damage: 1 },
+  splitter: { size: 34, hp: 4, speed: 1.1, damage: 1 },
 } as const;
 
 export const ENEMY = {
@@ -149,6 +150,7 @@ export const SPAWN = {
   maxPlacementTries: 100,
   treasureChance: 0.12, // шанс комнаты-сокровищницы
   bossChance: 0.2,      // шанс назначить комнату боссом
+  secretChance: 0.08,   // шанс секретной комнаты (+1 max HP один раз при входе)
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -169,4 +171,12 @@ export const FLOOR_SCALING = {
   densityMulPerFloor: 0.1,    // + множитель плотности на этаж
   bossHpMulPerFloor: 0.2,     // + множитель HP босса на этаж
   fastChancePerFloor: 0.03,   // + доля быстрых врагов на этаж
+};
+
+// ─────────────────────────────────────────────────────────────
+//  Боссы (мультифазные, milestone-этажи)
+// ─────────────────────────────────────────────────────────────
+export const BOSS = {
+  maxMinions: 4,        // верхний лимит живых миньёнов одного босса — иначе комната может не зачиститься
+  minionInterval: 120,  // шагов между попытками спавна миньёнов (фаза 3)
 };

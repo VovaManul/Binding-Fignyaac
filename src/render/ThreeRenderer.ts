@@ -8,7 +8,6 @@ import type { Game } from '../core/Game';
 import type { Room } from '../core/world/Room';
 import type { Enemy } from '../core/entities/Enemy';
 import type { Projectile } from '../core/entities/Projectile';
-import type { WeaponId } from '../core/weapons';
 import type { Renderer } from './Renderer';
 import { DEFAULT_THEME, type Theme } from './theme';
 import { Assets, type SpriteKey } from './assets';
@@ -55,6 +54,7 @@ export class ThreeRenderer implements Renderer {
   private readonly enemyMatKey: Record<Enemy['type'], SpriteKey> = {
     normal: 'enemy-normal', fast: 'enemy-fast', boss: 'enemy-boss',
     charger: 'enemy-charger', tank: 'enemy-tank', shooter: 'enemy-shooter',
+    splitter: 'enemy-fast', // пока используем визуал fast, пока нет отдельной текстуры
   };
 
   // Группа статичной геометрии комнаты (пол + стены + двери).
@@ -73,7 +73,7 @@ export class ThreeRenderer implements Renderer {
 
   private chestMesh: THREE.Mesh | null = null;
   private pickupMesh: THREE.Mesh | null = null;
-  private currentPickupWeapon: WeaponId | null = null;
+  private currentPickupWeapon: string | null = null;
 
   constructor(canvas: HTMLCanvasElement, assetBasePathOrTheme: string | Theme = 'assets', theme: Theme = DEFAULT_THEME) {
     const assetBasePath = typeof assetBasePathOrTheme === 'string' ? assetBasePathOrTheme : 'assets';
@@ -347,24 +347,30 @@ export class ThreeRenderer implements Renderer {
 
   private syncPickup(room: Room, visualStep: number): void {
     if (room.pickup) {
-      const wid = room.pickup.weaponId;
-      if (!this.pickupMesh || this.currentPickupWeapon !== wid) {
+      // Уникальный ключ для кэша меша: для оружия — его id, для предмета — префикс.
+      const pk = room.pickup;
+      const key = pk.kind === 'weapon' && pk.weaponId
+        ? `w:${pk.weaponId}`
+        : `i:${pk.itemId ?? '?'}`;
+      if (!this.pickupMesh || this.currentPickupWeapon !== key) {
         if (this.pickupMesh) {
           this.scene.remove(this.pickupMesh);
           (this.pickupMesh.material as THREE.Material).dispose();
         }
+        const tex = pk.kind === 'weapon' && pk.weaponId
+          ? this.assets.weaponIcon(pk.weaponId)
+          : this.assets.sprite('pickup');
         const mat = new THREE.MeshBasicMaterial({
-          map: this.assets.weaponIcon(wid), transparent: true, alphaTest: 0.3, side: THREE.DoubleSide,
+          map: tex, transparent: true, alphaTest: 0.3, side: THREE.DoubleSide,
         });
         this.pickupMesh = new THREE.Mesh(this.vGeo, mat);
         this.scene.add(this.pickupMesh);
-        this.currentPickupWeapon = wid;
+        this.currentPickupWeapon = key;
       }
-      const p = room.pickup;
-      const w = p.w * 1.6;
+      const w = pk.w * 1.6;
       const h = w * (48 / 48);
       this.pickupMesh.scale.set(w, h, 1);
-      this.pickupMesh.position.set(p.x, h / 2 + Math.sin(visualStep / 12) * 3, p.y);
+      this.pickupMesh.position.set(pk.x, h / 2 + Math.sin(visualStep / 12) * 3, pk.y);
     } else if (this.pickupMesh) {
       this.scene.remove(this.pickupMesh);
       (this.pickupMesh.material as THREE.Material).dispose();
