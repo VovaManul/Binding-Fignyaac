@@ -21,12 +21,19 @@ if (!result.success) {
 
 await Bun.write('./dist/index.html', await Bun.file('./index.html').text());
 
-// Копируем картинки в dist/assets (если папка есть).
+// Копируем картинки в dist/<asset-pack> (если папка есть).
 try {
   await mkdir('./dist/assets', { recursive: true });
   await cp('./src/assets', './dist/assets', { recursive: true });
 } catch {
   // src/assets ещё нет — не страшно, рендер откатится на процедурную графику.
+}
+
+try {
+  await mkdir('./dist/assets-binding-2', { recursive: true });
+  await cp('./src/assets-binding-2', './dist/assets-binding-2', { recursive: true });
+} catch {
+  // Второй пак ассетов опционален.
 }
 
 console.log('Сборка готова → dist/ (открой dist/index.html)');

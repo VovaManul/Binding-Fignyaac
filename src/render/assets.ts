@@ -3,12 +3,12 @@ import type { WeaponId } from '../core/weapons';
 
 /**
  * assets.ts — поставщик текстур. Каждая текстура грузится из
- * `src/assets/<ключ>.png` через THREE.TextureLoader; если PNG нет — рисуется
+ * `<пак>/<ключ>.png` через THREE.TextureLoader; если PNG нет — рисуется
  * процедурный фолбэк на canvas (функции drawX ниже), чтобы игра работала без
  * ассетов. Текстуры кэшируются и освобождаются в dispose().
  *
- * Как заменить/добавить графику: положи PNG с именем `<ключ>.png` в `src/assets/`
- * (dev-сервер отдаёт их из src/assets, прод-сборка копирует в dist/assets). Код
+ * Как заменить/добавить графику: положи PNG с именем `<ключ>.png` в папку пака
+ * (dev-сервер отдаёт их из src/<asset-pack>, прод-сборка копирует в dist/). Код
  * трогать не нужно. Функции drawX — это лишь плейсхолдер-фолбэк; правь их, только
  * если хочешь другой запасной рисунок. Полный список ключей — в docs/ASSET_BRIEF.md.
  */
@@ -364,9 +364,11 @@ export class Assets {
   private cache = new Map<string, THREE.Texture>();
   private readonly loader = new THREE.TextureLoader();
 
+  constructor(private readonly basePath = 'assets') {}
+
   /**
    * Возвращает текстуру по ключу. Сначала пытается загрузить PNG из
-   * `src/assets/<key>.png` (поставляется художником, см. docs/ASSET_BRIEF.md);
+   * `<basePath>/<key>.png` (поставляется художником, см. docs/ASSET_BRIEF.md);
    * если файла нет — рисует процедурный фолбэк, чтобы игра не ломалась.
    * 404 в консоли для ещё не добавленных ассетов — это норма (сработал фолбэк).
    */
@@ -375,7 +377,7 @@ export class Assets {
     if (cached) return cached;
 
     const tex = this.loader.load(
-      `assets/${key}.png`,
+      `${this.basePath}/${key}.png`,
       undefined,
       undefined,
       () => { tex.image = build() as unknown as HTMLImageElement; tex.needsUpdate = true; }, // PNG нет → процедурный фолбэк

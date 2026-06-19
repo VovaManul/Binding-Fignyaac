@@ -40,7 +40,7 @@ export class ThreeRenderer implements Renderer {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
   private readonly camera: THREE.PerspectiveCamera;
-  private readonly assets = new Assets();
+  private readonly assets: Assets;
   private readonly theme: Theme;
 
   // Общие геометрии.
@@ -75,8 +75,10 @@ export class ThreeRenderer implements Renderer {
   private pickupMesh: THREE.Mesh | null = null;
   private currentPickupWeapon: WeaponId | null = null;
 
-  constructor(canvas: HTMLCanvasElement, theme: Theme = DEFAULT_THEME) {
-    this.theme = theme;
+  constructor(canvas: HTMLCanvasElement, assetBasePathOrTheme: string | Theme = 'assets', theme: Theme = DEFAULT_THEME) {
+    const assetBasePath = typeof assetBasePathOrTheme === 'string' ? assetBasePathOrTheme : 'assets';
+    this.theme = typeof assetBasePathOrTheme === 'string' ? theme : assetBasePathOrTheme;
+    this.assets = new Assets(assetBasePath);
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.setSize(CW, CH, false);

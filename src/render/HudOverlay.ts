@@ -10,19 +10,21 @@ import type { Renderer } from './Renderer';
 export class HudOverlay implements Renderer {
   private readonly ctx: CanvasRenderingContext2D;
   private readonly images = new Map<string, HTMLImageElement>();
+  private readonly assetBasePath: string;
 
-  /** Лениво грузит PNG из assets/<name>.png; возвращает картинку, только когда она готова. */
+  /** Лениво грузит PNG из выбранного пака; возвращает картинку, только когда она готова. */
   private img(name: string): HTMLImageElement | null {
     let im = this.images.get(name);
     if (!im) {
       im = new Image();
-      im.src = `assets/${name}.png`;
+      im.src = `${this.assetBasePath}/${name}.png`;
       this.images.set(name, im);
     }
     return im.complete && im.naturalWidth > 0 ? im : null;
   }
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, assetBasePath = 'assets') {
+    this.assetBasePath = assetBasePath;
     // Буфер увеличиваем под плотность пикселей (чёткий текст на HiDPI),
     // а рисуем по-прежнему в логических координатах CW×CH.
     const dpr = Math.min(window.devicePixelRatio || 1, 2);

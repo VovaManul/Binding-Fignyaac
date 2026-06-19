@@ -22,8 +22,8 @@ const server = Bun.serve({
     if (url.pathname === '/' || url.pathname === '/index.html') {
       return new Response(Bun.file('./index.html'));
     }
-    // Картинки отдаём прямо из src/assets/ — положил PNG → сразу подхватился (без пересборки).
-    if (url.pathname.startsWith('/assets/')) {
+    // Картинки отдаём прямо из src/<asset-pack>/ — положил PNG → сразу подхватился.
+    if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/assets-binding-2/')) {
       const asset = Bun.file('./src' + url.pathname);
       if (await asset.exists()) return new Response(asset);
       return new Response('Not found', { status: 404 });
