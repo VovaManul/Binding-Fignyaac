@@ -60,7 +60,7 @@ function boot(): void {
     if (e.code === 'Escape' && loop) {
       const g = (window as Window & { game?: Game }).game;
       if (g?.inventoryOpen) {
-        g.inventoryOpen = false;
+        g.closeInventory();
         e.preventDefault();
         return;
       }

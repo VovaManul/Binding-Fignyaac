@@ -14,6 +14,7 @@ import type { Room } from './world/Room';
 import { collidesWall } from './systems/collision';
 import { spawnEnemies, spawnChest, pickChestWeapon } from './systems/spawner';
 import { WeaponPickup } from './entities/WeaponPickup';
+import type { WeaponDef } from './weapons';
 import { DEFAULT_RULES, scaleRulesForFloor, type LevelRules } from './rules';
 import type { InputState } from '../input/InputState';
 import { pressingDir } from '../input/InputState';
@@ -30,6 +31,7 @@ import { pressingDir } from '../input/InputState';
  */
 export class Game {
   readonly rules: LevelRules;
+  private floorRules: LevelRules;
   rng: Rng; // пересоздаётся в reset() — для воспроизводимости фикс-сида
   roomMap: RoomMap;
   player: Player;
@@ -40,6 +42,7 @@ export class Game {
   won = false;
   floor = 1;
   inventoryOpen = false;
+  elapsedSteps = 0;
 
   /**
    * @param rules правила уровня (см. core/rules.ts). По умолчанию — «Стандарт».
@@ -47,10 +50,11 @@ export class Game {
    */
   constructor(rules: LevelRules = DEFAULT_RULES, rng?: Rng) {
     this.rules = rules;
+    this.floorRules = rules;
     this.rng = rng ?? new Rng(rules.seed);
     this.player = new Player(rules.player);
     this.player.mode = this.player.currentWeapon.type === 'ranged' ? MODE_RANGED : MODE_MELEE;
-    this.roomMap = new RoomMap(this.rng, rules);
+    this.roomMap = new RoomMap(this.rng, this.floorRules);
     this.enterRoom('up');
   }
 
@@ -85,9 +89,16 @@ export class Game {
     this.inventoryOpen = false;
   }
 
+  /** Закрыть инвентарь без прямой мутации поля снаружи Game. */
+  closeInventory(): void {
+    this.inventoryOpen = false;
+  }
+
   /** Один фиксированный шаг симуляции (= 1/60 c). */
   step(input: InputState): void {
     if (this.gameOver || this.won || this.inventoryOpen) return;
+
+    this.elapsedSteps++;
 
     const room = this.curRoom;
     const p = this.player;
@@ -126,10 +137,14 @@ export class Game {
     this.gameOver = false;
     this.won = false;
     this.floor = 1;
+    this.inventoryOpen = false;
+    this.elapsedSteps = 0;
+    this.floorRules = this.rules;
     // Пере-сеем ГПСЧ из правил: фикс-сид → тот же данжен, иначе → новый каждый раз.
     this.rng = new Rng(this.rules.seed);
-    this.roomMap = new RoomMap(this.rng, this.rules);
+    this.roomMap = new RoomMap(this.rng, this.floorRules);
     this.player = new Player(this.rules.player);
+    this.player.mode = this.player.currentWeapon.type === 'ranged' ? MODE_RANGED : MODE_MELEE;
     this.cc = 0;
     this.cr = 0;
     this.meleeSwing = null;
@@ -157,7 +172,7 @@ export class Game {
     room.tears = [];
 
     if (!room.cleared && room.type !== 'spawn') {
-      room.enemies = spawnEnemies(room, fromDir, this.player.x, this.player.y, this.rng, this.rules);
+      room.enemies = spawnEnemies(room, fromDir, this.player.x, this.player.y, this.rng, this.floorRules);
       // Сундук в сокровищнице.
       if (room.type === 'treasure' && !room.chest) {
         room.chest = spawnChest(room, this.rng);
@@ -218,19 +233,26 @@ export class Game {
         t.speed = 0;
         t.life = w.beamLife ?? 10;
         t.damage = w.beamTickDmg ?? 2;
+        t.beamRadius = w.beamRadius ?? 44;
         room.tears.push(t);
       } else if (w.spreadCount && w.spreadCount > 1) {
         const spread = 0.15;
         const perpX = -ny;
         const perpY = nx;
+        const projectileType = w.projectileType ?? 'tear';
         for (let i = 0; i < w.spreadCount; i++) {
           const off = (i - (w.spreadCount - 1) / 2) * spread;
           const sx = nx + perpX * off;
           const sy = ny + perpY * off;
-          room.tears.push(new Projectile(p.x, p.y, sx, sy, w.projectileType));
+          const len = Math.hypot(sx, sy) || 1;
+          const t = new Projectile(p.x, p.y, sx / len, sy / len, projectileType);
+          this.applyWeaponProjectileStats(t, w);
+          room.tears.push(t);
         }
       } else {
-        room.tears.push(new Projectile(p.x, p.y, nx, ny, w.projectileType));
+        const t = new Projectile(p.x, p.y, nx, ny, w.projectileType ?? 'tear');
+        this.applyWeaponProjectileStats(t, w);
+        room.tears.push(t);
       }
     } else {
       this.meleeSwing = new MeleeSwing(p.x, p.y, dir, {
@@ -263,6 +285,15 @@ export class Game {
     }
   }
 
+  /** Снаряд запоминает свойства оружия при выстреле, а не при попадании. */
+  private applyWeaponProjectileStats(t: Projectile, w: WeaponDef): void {
+    t.damage = w.damage;
+    t.burnDamage = w.fireDmg ?? 1;
+    t.burnInterval = w.fireInterval ?? 10;
+    t.burnDuration = w.fireDuration ?? 0;
+    t.explosionRadius = w.explosionRadius ?? 0;
+  }
+
   private updateTears(room: Room): void {
     for (const t of room.tears) {
       if (!t.alive) continue;
@@ -272,7 +303,7 @@ export class Game {
         t.life--;
         if (t.life <= 0) continue;
         if (t.life % 2 === 0) {
-          const radius = this.player.currentWeapon.beamRadius ?? 44;
+          const radius = t.beamRadius || 44;
           for (const e of room.enemies) {
             if (!e.alive) continue;
             if (dist(t.x, t.y, e.x, e.y) < e.w / 2 + radius) {
@@ -325,8 +356,9 @@ export class Game {
             e.hp -= t.damage;
             e.hitTimer = ENEMY.hitFlash;
             if (t.type === 'fireball') {
-              const w = this.player.currentWeapon;
-              e.burnTimer = w.fireDuration ?? 0;
+              e.burnTimer = t.burnDuration;
+              e.burnDamage = t.burnDamage;
+              e.burnInterval = t.burnInterval;
             }
             if (t.type !== 'laser') {
               t.life = 0;
@@ -351,8 +383,7 @@ export class Game {
   /** Взрыв бомбы: AoE-урон по врагам. */
   private explodeBomb(room: Room, t: Projectile): void {
     if (t.type !== 'bomb') return;
-    const w = this.player.currentWeapon;
-    const radius = w.explosionRadius ?? 60;
+    const radius = t.explosionRadius || 60;
     for (const e of room.enemies) {
       if (!e.alive) continue;
       if (dist(t.x, t.y, e.x, e.y) < radius) {
@@ -392,19 +423,19 @@ export class Game {
 
     for (const e of room.enemies) {
       if (!e.alive) continue;
-      aliveCount++;
 
       if (e.hitTimer > 0) e.hitTimer--;
 
       // Горение: урон каждые fireInterval тиков.
       if (e.burnTimer > 0) {
         e.burnTimer--;
-        const staff = this.player.weapons.find((w) => w.id === 'staff');
-        if (staff && e.burnTimer % (staff.fireInterval ?? 10) === 0) {
-          e.hp--;
+        if (e.burnTimer % e.burnInterval === 0) {
+          e.hp -= e.burnDamage;
           e.hitTimer = ENEMY.hitFlash;
         }
       }
+      if (!e.alive) continue;
+      aliveCount++;
 
       // Фаза отбрасывания: летит по инерции, ИИ не работает.
       if (Math.abs(e.knx) > 0.1 || Math.abs(e.kny) > 0.1) {
@@ -419,7 +450,7 @@ export class Game {
       e.knx = 0;
       e.kny = 0;
 
-           if (e.type === 'boss' && this.milestoneBossFloor(this.floor)) {
+      if (e.type === 'boss' && this.milestoneBossFloor(this.floor)) {
         this.updateMilestoneBoss(e, room, p, newEnemies);
       } else if (e.type === 'shooter') {
         this.updateShooter(e, room, p);
@@ -507,7 +538,8 @@ export class Game {
         const rng = this.rng;
         const mx = OX + 2 * TILE + rng.float(0, COLS - 4) * TILE;
         const my = OY + 2 * TILE + rng.float(0, ROWS - 4) * TILE;
-        newEnemies.push(new Enemy(mx, my, 'fast', { hpMul: 1.5, speedMul: 1.2 }));
+        const er = this.floorRules.enemies;
+        newEnemies.push(new Enemy(mx, my, 'fast', { hpMul: er.hpMul * 1.5, speedMul: er.speedMul * 1.2 }));
       }
     }
   }
@@ -615,7 +647,7 @@ export class Game {
   /** Спуск на следующий этаж: новая карта, усиленные враги, HP/оружие сохраняются. */
   private descend(): void {
     this.floor++;
-    const rules = scaleRulesForFloor(this.rules, this.floor);
+    this.floorRules = scaleRulesForFloor(this.rules, this.floor);
 
     const p = this.player;
     const savedHp = p.hp;
@@ -624,7 +656,7 @@ export class Game {
     const floorSeed = this.rules.seed !== undefined ? this.rules.seed + this.floor : undefined;
     this.rng = floorSeed !== undefined ? new Rng(floorSeed) : new Rng();
 
-    this.roomMap = new RoomMap(this.rng, rules);
+    this.roomMap = new RoomMap(this.rng, this.floorRules);
     this.cc = 0;
     this.cr = 0;
     this.meleeSwing = null;

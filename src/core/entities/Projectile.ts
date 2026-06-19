@@ -15,6 +15,11 @@ export class Projectile {
   damage = PROJECTILE.damage;
   life = PROJECTILE.life;
   hostile = false; // true = вражеский снаряд, бьёт игрока
+  burnDuration = 0;
+  burnDamage = 1;
+  burnInterval = 10;
+  explosionRadius = 0;
+  beamRadius = 0;
 
   constructor(x: number, y: number, dx: number, dy: number, type: ProjectileType = 'tear') {
     this.x = this.prevX = x;

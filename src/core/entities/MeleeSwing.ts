@@ -5,6 +5,7 @@ import type { Dir, Box } from '../types';
 export class MeleeSwing {
   readonly dir: Dir;
   life = MELEE.life;
+  readonly maxLife: number;
   readonly damage: number;
   readonly kb: number;
   readonly box: Box;
@@ -14,6 +15,7 @@ export class MeleeSwing {
     this.damage = overrides?.damage ?? MELEE.damage;
     this.kb = overrides?.knockback ?? MELEE.knockback;
     if (overrides?.life !== undefined) this.life = overrides.life;
+    this.maxLife = this.life;
     const { reach: d } = MELEE;
     const size = MELEE.size * (overrides?.sizeMul ?? 1);
     const [dx, dy] = DIR[dir];

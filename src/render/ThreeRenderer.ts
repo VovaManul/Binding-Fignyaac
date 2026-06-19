@@ -137,7 +137,7 @@ export class ThreeRenderer implements Renderer {
     this.syncTears(room, alpha);
     this.syncSwing(game);
     this.syncChest(room);
-    this.syncPickup(room);
+    this.syncPickup(room, game.elapsedSteps + alpha);
     this.updateEffects();
 
     this.renderer.render(this.scene, this.camera);
@@ -319,7 +319,7 @@ export class ThreeRenderer implements Renderer {
     this.swingMesh.visible = true;
     this.swingMesh.position.set(s.box.x + s.box.w / 2, 2, s.box.y + s.box.h / 2);
     this.swingMesh.scale.set(s.box.w * 1.4, s.box.h * 1.4, 1);
-    (this.swingMesh.material as THREE.MeshBasicMaterial).opacity = 0.8 * (s.life / MELEE.life);
+    (this.swingMesh.material as THREE.MeshBasicMaterial).opacity = 0.8 * (s.life / s.maxLife);
   }
 
   private syncChest(room: Room): void {
@@ -343,7 +343,7 @@ export class ThreeRenderer implements Renderer {
     }
   }
 
-  private syncPickup(room: Room): void {
+  private syncPickup(room: Room, visualStep: number): void {
     if (room.pickup) {
       const wid = room.pickup.weaponId;
       if (!this.pickupMesh || this.currentPickupWeapon !== wid) {
@@ -362,7 +362,7 @@ export class ThreeRenderer implements Renderer {
       const w = p.w * 1.6;
       const h = w * (48 / 48);
       this.pickupMesh.scale.set(w, h, 1);
-      this.pickupMesh.position.set(p.x, h / 2 + Math.sin(Date.now() / 200) * 3, p.y);
+      this.pickupMesh.position.set(p.x, h / 2 + Math.sin(visualStep / 12) * 3, p.y);
     } else if (this.pickupMesh) {
       this.scene.remove(this.pickupMesh);
       (this.pickupMesh.material as THREE.Material).dispose();
