@@ -2,6 +2,8 @@ import type { RoomType, Doors } from '../types';
 import { buildTiles } from './tiles';
 import type { Enemy } from '../entities/Enemy';
 import type { Projectile } from '../entities/Projectile';
+import type { Chest } from '../entities/Chest';
+import type { WeaponPickup } from '../entities/WeaponPickup';
 
 /**
  * Комната дандженa. Хранит свой тип, набор дверей, состояние «зачищена/
@@ -17,6 +19,8 @@ export class Room {
   cleared = false;
   enemies: Enemy[] = [];
   tears: Projectile[] = [];
+  chest: Chest | null = null;
+  pickup: WeaponPickup | null = null;
   tiles: number[][];
 
   constructor(c: number, r: number, type: RoomType) {

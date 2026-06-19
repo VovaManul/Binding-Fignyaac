@@ -17,6 +17,7 @@ export interface InputState {
   attackHeld: boolean;  // атака «по ходу движения» (пробел)
   toggleWeapon: boolean; // сменить оружие (однократно)
   restart: boolean;      // рестарт на экране конца игры (однократно)
+  openInventory: boolean; // открыть инвентарь (однократно, E)
 }
 
 /** Любой источник ввода для игрового цикла: клавиатура, геймпад, бот, тест. */
@@ -33,6 +34,7 @@ export function emptyInput(): InputState {
     attackHeld: false,
     toggleWeapon: false,
     restart: false,
+    openInventory: false,
   };
 }
 

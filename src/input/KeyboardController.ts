@@ -18,6 +18,7 @@ export class KeyboardController implements InputSource {
   private held = new Set<string>();
   private toggleWeaponEdge = false;
   private restartEdge = false;
+  private inventoryEdge = false;
   private attached = false;
 
   private onKeyDown = (e: KeyboardEvent): void => {
@@ -26,6 +27,7 @@ export class KeyboardController implements InputSource {
     if (!this.held.has(c)) {
       if (c === 'Tab' || c === 'KeyQ') this.toggleWeaponEdge = true;
       if (c === 'KeyR') this.restartEdge = true;
+      if (c === 'KeyE') this.inventoryEdge = true;
     }
     this.held.add(c);
     if (PREVENT.has(c)) e.preventDefault();
@@ -49,6 +51,7 @@ export class KeyboardController implements InputSource {
     this.held.clear();
     this.toggleWeaponEdge = false;
     this.restartEdge = false;
+    this.inventoryEdge = false;
   }
 
   /** Подписаться на события окна. Вызывается один раз при старте. */
@@ -84,15 +87,17 @@ export class KeyboardController implements InputSource {
       attackHeld: down('Space'),
       toggleWeapon: this.toggleWeaponEdge,
       restart: this.restartEdge,
+      openInventory: this.inventoryEdge,
     };
 
     this.toggleWeaponEdge = false;
     this.restartEdge = false;
+    this.inventoryEdge = false;
     return snapshot;
   }
 }
 
 /** Физические клавиши (e.code), у которых гасим поведение браузера (скролл/таб). */
 const PREVENT = new Set([
-  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Tab',
+  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Tab', 'KeyE',
 ]);

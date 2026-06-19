@@ -1,20 +1,23 @@
 import * as THREE from 'three';
+import type { WeaponId } from '../core/weapons';
 
 /**
  * assets.ts — поставщик текстур. Каждая текстура грузится из
- * `src/assets/<ключ>.png` через THREE.TextureLoader; если PNG нет — рисуется
+ * `<пак>/<ключ>.png` через THREE.TextureLoader; если PNG нет — рисуется
  * процедурный фолбэк на canvas (функции drawX ниже), чтобы игра работала без
  * ассетов. Текстуры кэшируются и освобождаются в dispose().
  *
- * Как заменить/добавить графику: положи PNG с именем `<ключ>.png` в `src/assets/`
- * (dev-сервер отдаёт их из src/assets, прод-сборка копирует в dist/assets). Код
+ * Как заменить/добавить графику: положи PNG с именем `<ключ>.png` в папку пака
+ * (dev-сервер отдаёт их из src/<asset-pack>, прод-сборка копирует в dist/). Код
  * трогать не нужно. Функции drawX — это лишь плейсхолдер-фолбэк; правь их, только
  * если хочешь другой запасной рисунок. Полный список ключей — в docs/ASSET_BRIEF.md.
  */
 
 export type SpriteKey =
   | 'player-ranged' | 'player-melee'
-  | 'enemy-normal' | 'enemy-fast' | 'enemy-boss';
+  | 'enemy-normal' | 'enemy-fast' | 'enemy-boss'
+  | 'enemy-charger' | 'enemy-tank' | 'enemy-shooter'
+  | 'chest' | 'pickup' | 'fireball' | 'beam';
 
 function canvas(w: number, h: number): { cv: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
   const cv = document.createElement('canvas');
@@ -166,6 +169,183 @@ function drawDoor(open: boolean): HTMLCanvasElement {
   return cv;
 }
 
+/** Сундук: тёмный ящик с золотым ободком. */
+function drawChest(): HTMLCanvasElement {
+  const { cv, ctx } = canvas(48, 48);
+  ctx.fillStyle = '#5a3a1a';
+  roundRect(ctx, 4, 4, 40, 40, 4);
+  ctx.fill();
+  ctx.strokeStyle = '#8a6a2a';
+  ctx.lineWidth = 3;
+  roundRect(ctx, 4, 4, 40, 40, 4);
+  ctx.stroke();
+  ctx.fillStyle = '#c9a84a';
+  ctx.fillRect(12, 18, 24, 10);
+  ctx.fillStyle = '#8a6a2a';
+  ctx.fillRect(22, 14, 4, 18);
+  ctx.fillStyle = '#3a220a';
+  ctx.beginPath(); ctx.arc(24, 24, 4, 0, Math.PI * 2); ctx.fill();
+  return cv;
+}
+
+/** Пикап оружия: парящий ромб со свечением. */
+function drawPickup(): HTMLCanvasElement {
+  const { cv, ctx } = canvas(32, 32);
+  const g = ctx.createRadialGradient(16, 16, 1, 16, 16, 15);
+  g.addColorStop(0, '#ffdd88');
+  g.addColorStop(0.4, '#cc8822');
+  g.addColorStop(1, 'rgba(200,100,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 32, 32);
+  ctx.fillStyle = '#ffcc44';
+  ctx.beginPath();
+  ctx.moveTo(16, 4); ctx.lineTo(28, 16); ctx.lineTo(16, 28); ctx.lineTo(4, 16); ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#aa6600';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  return cv;
+}
+
+/** Зарядчик: красный, агрессивный вид, щель глаза. */
+function drawCharger(): HTMLCanvasElement {
+  return drawCharacter({ head: '#cc4422', body: '#882211', outline: '#330a04', eye: '#ffaa00', small: false });
+}
+
+/** Танк: большой, тёмный, тяжёлый. */
+function drawTank(): HTMLCanvasElement {
+  return drawCharacter({ head: '#554433', body: '#443322', outline: '#1a110a', eye: '#ff6622', horns: true });
+}
+
+/** Стрелок: синеватый, с «шапкой». */
+function drawShooter(): HTMLCanvasElement {
+  return drawCharacter({ head: '#4488aa', body: '#336688', outline: '#122436', eye: '#aaddff', small: false });
+}
+
+/** Лазерный луч: яркая бело-голубая полоса. */
+function drawBeam(): HTMLCanvasElement {
+  const { cv, ctx } = canvas(64, 64);
+  const g = ctx.createRadialGradient(32, 32, 2, 32, 32, 30);
+  g.addColorStop(0, '#ffffff');
+  g.addColorStop(0.2, '#88ddff');
+  g.addColorStop(0.5, '#4488ff');
+  g.addColorStop(1, 'rgba(0,50,200,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.fillRect(20, 28, 24, 8);
+  return cv;
+}
+
+/** Огненный шар: красно-оранжевый с бликом. */
+function drawFireball(): HTMLCanvasElement {
+  const { cv, ctx } = canvas(32, 32);
+  const g = ctx.createRadialGradient(16, 16, 1, 16, 16, 14);
+  g.addColorStop(0, '#ffee88');
+  g.addColorStop(0.3, '#ff6622');
+  g.addColorStop(0.7, '#cc2200');
+  g.addColorStop(1, 'rgba(100,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(16, 16, 14, 0, Math.PI * 2); ctx.fill();
+  return cv;
+}
+
+/** Иконка оружия: слеза (голубая капля). */
+function drawWeaponTears(): HTMLCanvasElement {
+  const { cv, ctx } = canvas(48, 48);
+  const g = ctx.createRadialGradient(24, 24, 2, 24, 24, 20);
+  g.addColorStop(0, '#dff0ff'); g.addColorStop(0.5, '#6699cc'); g.addColorStop(1, 'rgba(40,80,140,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(24, 24, 20, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#aaccee'; ctx.beginPath(); ctx.arc(20, 18, 6, 0, Math.PI * 2); ctx.fill();
+  return cv;
+}
+
+/** Иконка оружия: кулак. */
+function drawWeaponMelee(): HTMLCanvasElement {
+  const { cv, ctx } = canvas(48, 48);
+  ctx.fillStyle = '#8a6a3a';
+  roundRect(ctx, 10, 14, 28, 24, 6); ctx.fill();
+  ctx.strokeStyle = '#4a2a0a'; ctx.lineWidth = 2; roundRect(ctx, 10, 14, 28, 24, 6); ctx.stroke();
+  ctx.fillStyle = '#6a4a1a'; ctx.fillRect(14, 20, 8, 8); ctx.fillRect(26, 20, 8, 8);
+  ctx.fillRect(18, 30, 12, 6);
+  ctx.fillStyle = '#5a3a0a'; ctx.fillRect(20, 6, 8, 12);
+  return cv;
+}
+
+/** Иконка оружия: дробовик — три точки. */
+function drawWeaponShotgun(): HTMLCanvasElement {
+  const { cv, ctx } = canvas(48, 48);
+  for (const [x, y] of [[24, 16], [16, 30], [32, 30]]) {
+    const g = ctx.createRadialGradient(x, y, 1, x, y, 10);
+    g.addColorStop(0, '#ffcc44'); g.addColorStop(0.5, '#cc6622'); g.addColorStop(1, 'rgba(150,60,0,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill();
+  }
+  return cv;
+}
+
+/** Иконка оружия: топор. */
+function drawWeaponAxe(): HTMLCanvasElement {
+  const { cv, ctx } = canvas(48, 48);
+  ctx.fillStyle = '#777';
+  ctx.beginPath(); ctx.moveTo(8, 16); ctx.lineTo(38, 12); ctx.lineTo(40, 22); ctx.lineTo(30, 22); ctx.lineTo(30, 38); ctx.lineTo(16, 38); ctx.lineTo(16, 22); ctx.lineTo(6, 22); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = '#5a3a0a'; ctx.fillRect(22, 34, 4, 12);
+  return cv;
+}
+
+/** Иконка оружия: посох. */
+function drawWeaponStaff(): HTMLCanvasElement {
+  const { cv, ctx } = canvas(48, 48);
+  ctx.fillStyle = '#6a4a2a'; ctx.fillRect(22, 6, 4, 36);
+  ctx.fillStyle = '#ff4422';
+  ctx.beginPath(); ctx.arc(24, 10, 10, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ffcc44';
+  ctx.beginPath(); ctx.arc(24, 10, 5, 0, Math.PI * 2); ctx.fill();
+  return cv;
+}
+
+/** Иконка оружия: хлыст. */
+function drawWeaponWhip(): HTMLCanvasElement {
+  const { cv, ctx } = canvas(48, 48);
+  ctx.strokeStyle = '#8a6a3a'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(10, 38); ctx.quadraticCurveTo(18, 12, 38, 14); ctx.stroke();
+  ctx.strokeStyle = '#5a3a0a'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(10, 38); ctx.quadraticCurveTo(18, 12, 38, 14); ctx.stroke();
+  ctx.fillStyle = '#4a2a0a'; ctx.fillRect(6, 34, 8, 8);
+  return cv;
+}
+
+/** Иконка оружия: бомба. */
+function drawWeaponBomb(): HTMLCanvasElement {
+  const { cv, ctx } = canvas(48, 48);
+  ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(24, 24, 16, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#555'; ctx.beginPath(); ctx.arc(24, 24, 10, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#cc4422'; ctx.fillRect(22, 4, 4, 8);
+  ctx.fillStyle = '#ff8844'; ctx.beginPath(); ctx.arc(24, 4, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#222'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(24, 24, 16, 0, Math.PI * 2); ctx.stroke();
+  return cv;
+}
+
+/** Иконка оружия: бумеранг. */
+function drawWeaponBoomerang(): HTMLCanvasElement {
+  const { cv, ctx } = canvas(48, 48);
+  ctx.fillStyle = '#8a6a3a';
+  ctx.beginPath(); ctx.moveTo(8, 36); ctx.lineTo(22, 16); ctx.lineTo(40, 6); ctx.lineTo(38, 18); ctx.lineTo(22, 28); ctx.lineTo(18, 36); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#4a2a0a'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = '#a08850'; ctx.fillRect(8, 30, 12, 8);
+  return cv;
+}
+
+/** Иконка оружия: лазер. */
+function drawWeaponLaser(): HTMLCanvasElement {
+  const { cv, ctx } = canvas(48, 48);
+  const g = ctx.createLinearGradient(8, 24, 40, 24);
+  g.addColorStop(0, 'rgba(100,180,255,0.2)'); g.addColorStop(0.3, '#88ddff'); g.addColorStop(0.5, '#ffffff'); g.addColorStop(0.7, '#88ddff'); g.addColorStop(1, 'rgba(100,180,255,0.2)');
+  ctx.fillStyle = g; ctx.fillRect(8, 18, 32, 12);
+  ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fillRect(12, 22, 24, 4);
+  return cv;
+}
+
 /** Мягкая тень-«пятно» под сущностью. */
 function drawShadow(): HTMLCanvasElement {
   const { cv, ctx } = canvas(64, 32);
@@ -184,9 +364,11 @@ export class Assets {
   private cache = new Map<string, THREE.Texture>();
   private readonly loader = new THREE.TextureLoader();
 
+  constructor(private readonly basePath = 'assets') {}
+
   /**
    * Возвращает текстуру по ключу. Сначала пытается загрузить PNG из
-   * `src/assets/<key>.png` (поставляется художником, см. docs/ASSET_BRIEF.md);
+   * `<basePath>/<key>.png` (поставляется художником, см. docs/ASSET_BRIEF.md);
    * если файла нет — рисует процедурный фолбэк, чтобы игра не ломалась.
    * 404 в консоли для ещё не добавленных ассетов — это норма (сработал фолбэк).
    */
@@ -195,7 +377,7 @@ export class Assets {
     if (cached) return cached;
 
     const tex = this.loader.load(
-      `assets/${key}.png`,
+      `${this.basePath}/${key}.png`,
       undefined,
       undefined,
       () => { tex.image = build() as unknown as HTMLImageElement; tex.needsUpdate = true; }, // PNG нет → процедурный фолбэк
@@ -217,6 +399,13 @@ export class Assets {
         case 'enemy-normal': return drawCharacter({ head: '#c08a5a', body: '#9a5a36', outline: '#3a2210', eye: '#2a1c0c' });
         case 'enemy-fast': return drawCharacter({ head: '#bb3030', body: '#992222', outline: '#4a0e0e', eye: '#ffdddd', small: true });
         case 'enemy-boss': return drawCharacter({ head: '#7a1414', body: '#5a0a0a', outline: '#250303', eye: '#ff4444', horns: true });
+        case 'enemy-charger': return drawCharger();
+        case 'enemy-tank': return drawTank();
+        case 'enemy-shooter': return drawShooter();
+        case 'chest': return drawChest();
+        case 'pickup': return drawPickup();
+        case 'fireball': return drawFireball();
+        case 'beam': return drawBeam();
       }
     });
   }
@@ -229,6 +418,25 @@ export class Assets {
   muzzle(): THREE.Texture { return this.get('muzzle', () => drawGlow('#fffbe0', 'rgba(255,200,60,0.7)'), false); }
   spark(): THREE.Texture { return this.get('spark', () => drawGlow('#ffffff', 'rgba(255,230,170,0.6)'), false); }
   puff(): THREE.Texture { return this.get('puff', () => drawGlow('rgba(220,220,230,0.9)', 'rgba(120,120,140,0.4)'), false); }
+  chest(): THREE.Texture { return this.get('chest', drawChest, false); }
+  pickup(): THREE.Texture { return this.get('pickup', drawPickup, false); }
+  fireball(): THREE.Texture { return this.get('fireball', drawFireball, false); }
+
+  weaponIcon(id: WeaponId): THREE.Texture {
+    return this.get(`weapon-icon-${id}`, () => {
+      switch (id) {
+        case 'tears': return drawWeaponTears();
+        case 'melee': return drawWeaponMelee();
+        case 'shotgun': return drawWeaponShotgun();
+        case 'axe': return drawWeaponAxe();
+        case 'staff': return drawWeaponStaff();
+        case 'whip': return drawWeaponWhip();
+        case 'bomb': return drawWeaponBomb();
+        case 'boomerang': return drawWeaponBoomerang();
+        case 'laser': return drawWeaponLaser();
+      }
+    });
+  }
 
   dispose(): void {
     for (const t of this.cache.values()) t.dispose();

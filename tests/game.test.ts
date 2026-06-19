@@ -133,4 +133,51 @@ describe('Game', () => {
     expect(game.cc).toBe(0);
     expect(game.cr).toBe(0);
   });
+
+  it('РЕГРЕССИЯ: бесконечный спуск применяет усиление врагов при спавне комнат', () => {
+    const endless = { ...PRESETS.find((p) => p.id === 'endless')!, seed: 100 };
+    const game = new Game(endless);
+
+    for (let targetFloor = 2; targetFloor <= 5; targetFloor++) {
+      const bossRoom = [...game.roomMap.rooms.values()].find((room) => room.type === 'boss')!;
+      bossRoom.cleared = true;
+      game.step(input());
+      expect(game.floor).toBe(targetFloor);
+    }
+
+    const bossRoom = [...game.roomMap.rooms.values()].find((room) => room.type === 'boss')!;
+    game.cc = bossRoom.c;
+    game.cr = bossRoom.r;
+    game.enterRoom('up');
+
+    const boss = bossRoom.enemies.find((e) => e.type === 'boss')!;
+    expect(boss.maxHp).toBeGreaterThan(10);
+  });
+
+  it('снаряд берёт урон из выбранного оружия', () => {
+    const game = new Game(DEFAULT_RULES, new Rng(12));
+    game.player.addWeapon('boomerang');
+
+    game.step(input({ aimDir: 'right' }));
+
+    expect(game.curRoom.tears[0].type).toBe('boomerang');
+    expect(game.curRoom.tears[0].damage).toBe(2);
+  });
+
+  it('РЕГРЕССИЯ: эффект снаряда не зависит от смены оружия после выстрела', () => {
+    const game = new Game(DEFAULT_RULES, new Rng(13));
+    game.player.addWeapon('staff');
+
+    const enemy = new Enemy(game.player.x + 7, game.player.y, 'tank');
+    game.curRoom.enemies = [enemy];
+
+    game.step(input({ aimDir: 'right' }));
+    expect(enemy.burnTimer).toBeGreaterThan(0);
+
+    const hpAfterHit = enemy.hp;
+    game.player.addWeapon('tears');
+    for (let i = 0; i < 10; i++) game.step(input());
+
+    expect(enemy.hp).toBeLessThan(hpAfterHit);
+  });
 });

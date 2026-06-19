@@ -36,6 +36,16 @@
     #menu h1 { font-size: 40px; letter-spacing: 4px; color: #c9b27a; margin-bottom: 4px; }
     #menu-logo { display: block; width: min(560px, 80%); height: auto; }
     .menu-sub { color: #888; margin-bottom: 6px; }
+    .menu-packs { display: flex; gap: 8px; margin-bottom: 2px; }
+    .menu-pack {
+      cursor: pointer;
+      background: rgba(12,12,18,0.86); color: #aaa;
+      border: 1px solid #333; border-radius: 4px;
+      padding: 7px 12px; font-family: monospace; font-size: 12px;
+      transition: background .12s, border-color .12s, color .12s;
+    }
+    .menu-pack:hover { background: #1d1d2c; border-color: #5a78c0; color: #ddd; }
+    .menu-pack.is-selected { color: #f0d887; border-color: #8f6f25; background: rgba(42,32,12,0.88); }
     #menu-presets { display: flex; flex-direction: column; gap: 10px; width: 360px; max-width: 90%; }
     .menu-preset {
       display: flex; flex-direction: column; gap: 3px;

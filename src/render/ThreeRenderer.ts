@@ -8,6 +8,7 @@ import type { Game } from '../core/Game';
 import type { Room } from '../core/world/Room';
 import type { Enemy } from '../core/entities/Enemy';
 import type { Projectile } from '../core/entities/Projectile';
+import type { WeaponId } from '../core/weapons';
 import type { Renderer } from './Renderer';
 import { DEFAULT_THEME, type Theme } from './theme';
 import { Assets, type SpriteKey } from './assets';
@@ -39,7 +40,7 @@ export class ThreeRenderer implements Renderer {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
   private readonly camera: THREE.PerspectiveCamera;
-  private readonly assets = new Assets();
+  private readonly assets: Assets;
   private readonly theme: Theme;
 
   // Общие геометрии.
@@ -53,6 +54,7 @@ export class ThreeRenderer implements Renderer {
   private readonly playerMat: Record<'ranged' | 'melee', THREE.MeshBasicMaterial>;
   private readonly enemyMatKey: Record<Enemy['type'], SpriteKey> = {
     normal: 'enemy-normal', fast: 'enemy-fast', boss: 'enemy-boss',
+    charger: 'enemy-charger', tank: 'enemy-tank', shooter: 'enemy-shooter',
   };
 
   // Группа статичной геометрии комнаты (пол + стены + двери).
@@ -69,8 +71,14 @@ export class ThreeRenderer implements Renderer {
   private readonly effects: Effect[] = [];
   private lastAtkCD = 0;
 
-  constructor(canvas: HTMLCanvasElement, theme: Theme = DEFAULT_THEME) {
-    this.theme = theme;
+  private chestMesh: THREE.Mesh | null = null;
+  private pickupMesh: THREE.Mesh | null = null;
+  private currentPickupWeapon: WeaponId | null = null;
+
+  constructor(canvas: HTMLCanvasElement, assetBasePathOrTheme: string | Theme = 'assets', theme: Theme = DEFAULT_THEME) {
+    const assetBasePath = typeof assetBasePathOrTheme === 'string' ? assetBasePathOrTheme : 'assets';
+    this.theme = typeof assetBasePathOrTheme === 'string' ? theme : assetBasePathOrTheme;
+    this.assets = new Assets(assetBasePath);
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.setSize(CW, CH, false);
@@ -130,6 +138,8 @@ export class ThreeRenderer implements Renderer {
     this.syncEnemies(room, alpha);
     this.syncTears(room, alpha);
     this.syncSwing(game);
+    this.syncChest(room);
+    this.syncPickup(room, game.elapsedSteps + alpha);
     this.updateEffects();
 
     this.renderer.render(this.scene, this.camera);
@@ -239,18 +249,27 @@ export class ThreeRenderer implements Renderer {
 
       const x = lerp(e.prevX, e.x, alpha);
       const z = lerp(e.prevY, e.y, alpha);
-      const pop = 1 + 0.18 * (e.hitTimer / Math.max(1, MELEE.life)); // «дёргается» при попадании
+      const pop = 1 + 0.18 * (e.hitTimer / Math.max(1, MELEE.life));
       const w = e.w * SPRITE_SCALE * pop;
       const h = w * SPRITE_ASPECT;
       v.sprite.scale.set(w, h, 1);
       v.sprite.position.set(x, h / 2, z);
       this.placeShadow(v.shadow, x, z, e.w);
-
       // Искра в момент попадания (hitTimer вырос).
       if (e.hitTimer > v.lastHit) {
-        this.spawnEffect(this.assets.spark(), this.theme.flash, x, e.w * 0.6, z, e.w * 0.9, 8, { vy: 0.6, grow: 1.06 });
+        // Увеличенный эффект для смены фазы босса (15+ тиков)
+        const size = e.hitTimer >= 12 ? e.w * 1.5 : e.w * 0.9;
+        const life = e.hitTimer >= 12 ? 16 : 8;
+        this.spawnEffect(this.assets.puff(), 0xff6600, x, e.w * 0.6, z, size, life, { vy: 0.8, grow: 1.06 });
       }
       v.lastHit = e.hitTimer;
+
+      // Цвет подкраски по фазе босса.
+      let phaseTint = 0xffffff;
+      if (e.burnTimer > 0) phaseTint = 0xff6644;
+      else if (e.type === 'boss' && e.phase === 2) phaseTint = 0xff8844;
+      else if (e.type === 'boss' && e.phase >= 3) phaseTint = 0xff3300;
+      (v.sprite.material as THREE.MeshBasicMaterial).color.setHex(phaseTint);
     }
 
     // Уборка: исчезнувшие враги. Если враг мёртв — «пуф» на месте гибели.
@@ -272,15 +291,21 @@ export class ThreeRenderer implements Renderer {
       live.add(t);
       let mesh = this.tearMeshes.get(t);
       if (!mesh) {
+        const tex =
+          t.type === 'fireball' ? this.assets.fireball() :
+          t.type === 'beam' ? this.assets.sprite('beam') :
+          this.assets.tear();
         mesh = new THREE.Mesh(this.vGeo, new THREE.MeshBasicMaterial({
-          map: this.assets.tear(), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+          map: tex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
         }));
-        const s = PROJECTILE.radius * 4;
+        const s = t.type === 'fireball' ? PROJECTILE.radius * 5 :
+                  t.type === 'beam' ? 50 :
+                  PROJECTILE.radius * 4;
         mesh.scale.set(s, s, 1);
         this.scene.add(mesh);
         this.tearMeshes.set(t, mesh);
       }
-      mesh.position.set(lerp(t.prevX, t.x, alpha), TEAR_Y, lerp(t.prevY, t.y, alpha));
+      mesh.position.set(lerp(t.prevX, t.x, alpha), t.type === 'beam' ? 10 : TEAR_Y, lerp(t.prevY, t.y, alpha));
     }
     for (const [t, mesh] of this.tearMeshes) {
       if (live.has(t)) continue;
@@ -296,7 +321,56 @@ export class ThreeRenderer implements Renderer {
     this.swingMesh.visible = true;
     this.swingMesh.position.set(s.box.x + s.box.w / 2, 2, s.box.y + s.box.h / 2);
     this.swingMesh.scale.set(s.box.w * 1.4, s.box.h * 1.4, 1);
-    (this.swingMesh.material as THREE.MeshBasicMaterial).opacity = 0.8 * (s.life / MELEE.life);
+    (this.swingMesh.material as THREE.MeshBasicMaterial).opacity = 0.8 * (s.life / s.maxLife);
+  }
+
+  private syncChest(room: Room): void {
+    if (room.chest?.alive) {
+      if (!this.chestMesh) {
+        const mat = new THREE.MeshBasicMaterial({
+          map: this.assets.sprite('chest'), transparent: true, alphaTest: 0.3, side: THREE.DoubleSide,
+        });
+        this.chestMesh = new THREE.Mesh(this.vGeo, mat);
+        this.scene.add(this.chestMesh);
+      }
+      const c = room.chest;
+      const w = c.w * 1.2;
+      const h = w * (64 / 48);
+      this.chestMesh.scale.set(w, h, 1);
+      this.chestMesh.position.set(c.x, h / 2, c.y);
+    } else if (this.chestMesh) {
+      this.scene.remove(this.chestMesh);
+      (this.chestMesh.material as THREE.Material).dispose();
+      this.chestMesh = null;
+    }
+  }
+
+  private syncPickup(room: Room, visualStep: number): void {
+    if (room.pickup) {
+      const wid = room.pickup.weaponId;
+      if (!this.pickupMesh || this.currentPickupWeapon !== wid) {
+        if (this.pickupMesh) {
+          this.scene.remove(this.pickupMesh);
+          (this.pickupMesh.material as THREE.Material).dispose();
+        }
+        const mat = new THREE.MeshBasicMaterial({
+          map: this.assets.weaponIcon(wid), transparent: true, alphaTest: 0.3, side: THREE.DoubleSide,
+        });
+        this.pickupMesh = new THREE.Mesh(this.vGeo, mat);
+        this.scene.add(this.pickupMesh);
+        this.currentPickupWeapon = wid;
+      }
+      const p = room.pickup;
+      const w = p.w * 1.6;
+      const h = w * (48 / 48);
+      this.pickupMesh.scale.set(w, h, 1);
+      this.pickupMesh.position.set(p.x, h / 2 + Math.sin(visualStep / 12) * 3, p.y);
+    } else if (this.pickupMesh) {
+      this.scene.remove(this.pickupMesh);
+      (this.pickupMesh.material as THREE.Material).dispose();
+      this.pickupMesh = null;
+      this.currentPickupWeapon = null;
+    }
   }
 
   // ── Эффекты (частицы-биллборды) ───────────────────────────
@@ -362,6 +436,8 @@ export class ThreeRenderer implements Renderer {
     for (const m of this.tearMeshes.values()) (m.material as THREE.Material).dispose();
     for (const fx of this.effects) (fx.mesh.material as THREE.Material).dispose();
     (this.swingMesh.material as THREE.Material).dispose();
+    if (this.chestMesh) (this.chestMesh.material as THREE.Material).dispose();
+    if (this.pickupMesh) (this.pickupMesh.material as THREE.Material).dispose();
     this.floorMat.dispose();
     this.wallMat.dispose();
     this.shadowMat.dispose();

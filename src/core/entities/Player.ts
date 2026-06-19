@@ -1,4 +1,5 @@
 import { PLAYER, MODE_RANGED } from '../../config';
+import { WEAPONS, type WeaponId, type WeaponDef } from '../weapons';
 import type { CombatMode, Box, Dir } from '../types';
 
 /**
@@ -23,6 +24,11 @@ export class Player {
   invTimer = 0;         // неуязвимость (шаги)
   transCD = 0;          // блок перехода между комнатами (шаги)
 
+  /** Ровно 2 слота под оружие. */
+  weapons: [WeaponDef, WeaponDef] = [WEAPONS.tears, WEAPONS.melee];
+  /** 0 или 1 — какой слот сейчас экипирован. */
+  equipped: 0 | 1 = 0;
+
   /** Переопределения из правил уровня; по умолчанию — баланс из config. */
   constructor(rules: { maxHp?: number; speed?: number } = {}) {
     this.maxHp = rules.maxHp ?? PLAYER.maxHp;
@@ -33,6 +39,16 @@ export class Player {
   /** Хитбокс с центром в (x, y). */
   get box(): Box {
     return { x: this.x - this.w / 2, y: this.y - this.h / 2, w: this.w, h: this.h };
+  }
+
+  get currentWeapon(): WeaponDef {
+    return this.weapons[this.equipped];
+  }
+
+  /** Подобрать оружие — заменяет текущий экипированный слот. */
+  addWeapon(id: WeaponId): void {
+    this.weapons[this.equipped] = WEAPONS[id];
+    this.mode = WEAPONS[id].type === 'ranged' ? MODE_RANGED : 1;
   }
 
   /** Поставить позицию мгновенно, сбросив интерполяцию (телепорт). */
